@@ -1,0 +1,7956 @@
+<?php
+/**
+ * Plugin Name: Auto Order Assign To Moderator
+ * Plugin URI: https://shirinshoes.com/
+ * Description: Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing.
+ * Version: 1.1.3
+ * Author: Anowar Hossain
+ * Author URI: https://shirinshoes.com/
+ * Company: Shirin Fashion
+ * Text Domain: auto-order-assign-moderator
+ * Requires at least: 5.8
+ * Requires PHP: 7.4
+ * WC requires at least: 6.0
+ */
+
+// Prevent direct access
+if (!defined('ABSPATH')) {
+ exit;
+}
+
+// Check if WooCommerce is active
+if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
+ add_action('admin_notices', 'aoam_woocommerce_missing_notice');
+ return;
+}
+
+function aoam_woocommerce_missing_notice() {
+ ?>
+ <div class="error">
+ <p><?php _e('Auto Order Assign To Moderator requires WooCommerce to be installed and active.', 'auto-order-assign-moderator'); ?></p>
+ </div>
+ <?php
+}
+
+
+// Get assigned roles dynamically
+function aoam_get_assigned_roles() {
+ return get_option('aoam_assigned_roles', array('moderator'));
+}
+
+// ====================================================
+// SHIFT SETTINGS FUNCTIONS
+// ====================================================
+
+// Get shift settings
+function aoam_get_shift_settings() {
+ $default_shifts = array(
+ 'shift_1' => array(
+ 'name' => '1st Shift',
+ 'start' => '09:01',
+ 'end' => '22:00',
+ 'color' => '#4CAF50'
+ ),
+ 'shift_2' => array(
+ 'name' => '2nd Shift',
+ 'start' => '22:01',
+ 'end' => '02:00',
+ 'color' => '#2196F3'
+ ),
+ 'shift_3' => array(
+ 'name' => '3rd Shift',
+ 'start' => '02:01',
+ 'end' => '09:00',
+ 'color' => '#FF9800'
+ )
+ );
+ 
+ return get_option('aoam_shift_settings', $default_shifts);
+}
+
+// Update shift settings
+function aoam_update_shift_settings($shifts) {
+ update_option('aoam_shift_settings', $shifts);
+}
+
+// Plugin Settings Page with Shift Settings
+function aoam_plugin_settings_page() {
+ // Handle form submissions
+ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ if (isset($_POST['update_aoam_settings']) && wp_verify_nonce($_POST['aoam_settings_nonce'], 'aoam_settings')) {
+ // Update assigned roles
+ $selected_roles = isset($_POST['assigned_roles']) ? array_map('sanitize_text_field', $_POST['assigned_roles']) : array();
+ update_option('aoam_assigned_roles', $selected_roles);
+ 
+ echo '<div class="notice notice-success"><p>Settings updated successfully!</p></div>';
+ }
+ 
+ // Handle shift settings update
+ if (isset($_POST['update_shift_settings']) && wp_verify_nonce($_POST['shift_settings_nonce'], 'shift_settings')) {
+ $shift_settings = array();
+ 
+ for ($i = 1; $i <= 3; $i++) {
+ $shift_key = 'shift_' . $i;
+ $shift_settings[$shift_key] = array(
+ 'name' => sanitize_text_field($_POST['shift_name_' . $i]),
+ 'start' => sanitize_text_field($_POST['shift_start_' . $i]),
+ 'end' => sanitize_text_field($_POST['shift_end_' . $i]),
+ 'color' => sanitize_text_field($_POST['shift_color_' . $i])
+ );
+ }
+ 
+ aoam_update_shift_settings($shift_settings);
+ echo '<div class="notice notice-success"><p>Shift settings updated successfully!</p></div>';
+ }
+ }
+ 
+ $current_roles = get_option('aoam_assigned_roles', array('moderator'));
+ $all_roles = wp_roles()->get_names();
+ $shift_settings = aoam_get_shift_settings();
+ ?>
+ <div class="wrap">
+        <h1>Plugin Settings</h1>
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo admin_url('admin.php?page=moderator-settings'); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="nav-tab">Recent Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab nav-tab-active">Plugin Settings</a>
+ </div>
+
+ <!-- Role Assignment Settings -->
+ <div class="card">
+            <h2>User Role Assignment Settings</h2>
+ <form method="post">
+ <?php wp_nonce_field('aoam_settings', 'aoam_settings_nonce'); ?>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+ <?php foreach ($all_roles as $role_key => $role_name): 
+ if ($role_key === 'administrator') continue;
+ ?>
+ <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+ <input type="checkbox" name="assigned_roles[]" value="<?php echo esc_attr($role_key); ?>" 
+ <?php checked(in_array($role_key, $current_roles)); ?>>
+ <strong><?php echo esc_html($role_name); ?></strong>
+ <code style="font-size: 11px; color: #666;"><?php echo $role_key; ?></code>
+ </label>
+ <?php endforeach; ?>
+ </div>
+ <input type="submit" name="update_aoam_settings" class="button button-primary" value=" Save Role Settings">
+ </form>
+ </div>
+
+ <!-- Shift Settings -->
+ <div class="card" style="max-width:100%;">
+ <h2> Shift Settings</h2>
+ <p>Configure the three shifts for order assignment. Users can be assigned to one or multiple shifts.</p>
+ 
+ <form method="post">
+ <?php wp_nonce_field('shift_settings', 'shift_settings_nonce'); ?>
+ 
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin: 20px 0;">
+ <?php for ($i = 1; $i <= 3; $i++): 
+ $shift_key = 'shift_' . $i;
+ $shift = isset($shift_settings[$shift_key]) ? $shift_settings[$shift_key] : array();
+ ?>
+ <div style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: <?php echo isset($shift['color']) ? $shift['color'] . '10' : '#f8f9fa'; ?>;">
+ <h3 style="margin-top: 0; color: <?php echo isset($shift['color']) ? $shift['color'] : '#0073aa'; ?>;">
+ Shift <?php echo $i; ?> Settings
+ </h3>
+ 
+ <div style="margin-bottom: 15px;">
+ <label style="display: block; margin-bottom: 5px; font-weight: bold;">Shift Name:</label>
+ <input type="text" name="shift_name_<?php echo $i; ?>" 
+ value="<?php echo isset($shift['name']) ? esc_attr($shift['name']) : 'Shift ' . $i; ?>" 
+ style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+ </div>
+ 
+ <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+ <div>
+ <label style="display: block; margin-bottom: 5px; font-weight: bold;">Start Time:</label>
+ <input type="time" name="shift_start_<?php echo $i; ?>" 
+ value="<?php echo isset($shift['start']) ? esc_attr($shift['start']) : '00:00'; ?>" 
+ style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+ </div>
+ <div>
+ <label style="display: block; margin-bottom: 5px; font-weight: bold;">End Time:</label>
+ <input type="time" name="shift_end_<?php echo $i; ?>" 
+ value="<?php echo isset($shift['end']) ? esc_attr($shift['end']) : '00:00'; ?>" 
+ style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+ </div>
+ </div>
+ 
+ <div style="margin-bottom: 15px;">
+ <label style="display: block; margin-bottom: 5px; font-weight: bold;">Color:</label>
+ <input type="color" name="shift_color_<?php echo $i; ?>" 
+ value="<?php echo isset($shift['color']) ? esc_attr($shift['color']) : '#0073aa'; ?>" 
+ style="width: 100%; height: 40px; border: 1px solid #ddd; border-radius: 4px;">
+ </div>
+ 
+ <div style="padding: 10px; background: white; border-radius: 4px; border-left: 4px solid <?php echo isset($shift['color']) ? $shift['color'] : '#0073aa'; ?>;">
+ <strong>Current Time:</strong> 
+ <?php echo isset($shift['start']) ? $shift['start'] : '00:00'; ?> 
+ to 
+ <?php echo isset($shift['end']) ? $shift['end'] : '00:00'; ?>
+ </div>
+ </div>
+ <?php endfor; ?>
+ </div>
+ 
+ <div style="background: #f0f6ff; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+ <h4 style="margin-top: 0;"> Shift Configuration Tips:</h4>
+ <ul style="margin: 10px 0; padding-left: 20px;">
+ <?php
+ $shift_settings = aoam_get_shift_settings();
+ 
+ foreach ($shift_settings as $shift_key => $shift) {
+ $shift_name = esc_html($shift['name']);
+ $shift_start = esc_html($shift['start']);
+ $shift_end = esc_html($shift['end']);
+ 
+ // Convert 24-hour format to 12-hour format with AM/PM
+ $start_time_12hr = date("g:i A", strtotime($shift_start));
+ $end_time_12hr = date("g:i A", strtotime($shift_end));
+ 
+ // Determine shift type based on time
+ $shift_type = "";
+ $start_hour = (int)date('H', strtotime($shift_start));
+ $end_hour = (int)date('H', strtotime($shift_end));
+ 
+ if ($shift_key === 'shift_1') {
+ $shift_type = "(Day Shift)";
+ } elseif ($shift_key === 'shift_2') {
+ $shift_type = "(Night Shift 1)";
+ } elseif ($shift_key === 'shift_3') {
+ $shift_type = "(Night Shift 2)";
+ } else {
+ // For custom shifts, determine type based on hours
+ if ($start_hour >= 6 && $end_hour <= 18) {
+ $shift_type = "(Day Shift)";
+ } elseif ($start_hour >= 18 || $end_hour <= 6) {
+ if ($start_hour >= 22 || $end_hour <= 2) {
+ $shift_type = "(Late Night Shift)";
+ } else {
+ $shift_type = "(Night Shift)";
+ }
+ } else {
+ $shift_type = "(Mixed Shift)";
+ }
+ }
+ 
+ echo "<li><strong>{$shift_name}:</strong> {$start_time_12hr} to {$end_time_12hr} {$shift_type}</li>";
+ }
+ ?>
+ <li>Each user can be assigned to one or multiple shifts</li>
+ <li>Only active users in their assigned shifts will receive orders</li>
+ <li>Users with no shifts assigned will receive orders anytime (Always Active)</li>
+ <li><strong>Current Server Time:</strong> <?php echo current_time('F j, Y, g:i A'); ?></li>
+ </ul>
+ 
+ <!-- Show shift color indicators -->
+ <div style="display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap; align-items: center;">
+ <div style="font-weight: bold;">Shift Colors:</div>
+ <?php foreach ($shift_settings as $shift_key => $shift): ?>
+ <div style="display: flex; align-items: center; gap: 5px;">
+ <div style="width: 12px; height: 12px; background: <?php echo $shift['color']; ?>; border-radius: 50%;"></div>
+ <span style="font-size: 12px;"><?php echo $shift['name']; ?></span>
+ </div>
+ <?php endforeach; ?>
+ </div>
+ </div>
+ 
+ <input type="submit" name="update_shift_settings" class="button button-primary" value=" Save Shift Settings">
+ </form>
+ </div>
+ </div>
+ <?php
+}
+
+function aoam_get_remote_import_settings() {
+ $settings = wp_parse_args(get_option('aoam_remote_import_settings', array()), array(
+ 'site_url' => '',
+ 'consumer_key' => '',
+ 'consumer_secret' => '',
+ 'statuses' => 'processing,pending,on-hold',
+ 'per_page' => 20,
+ 'enabled' => 'yes',
+ 'sources' => array(),
+ ));
+ if (empty($settings['sources']) && !empty($settings['site_url'])) {
+ $settings['sources'] = array(array(
+ 'site_url' => $settings['site_url'],
+ 'consumer_key' => $settings['consumer_key'],
+ 'consumer_secret' => $settings['consumer_secret'],
+ 'statuses' => $settings['statuses'],
+ 'per_page' => $settings['per_page'],
+ 'enabled' => 'yes',
+ ));
+ }
+ return $settings;
+}
+
+add_filter('cron_schedules', 'aoam_remote_import_cron_schedules');
+function aoam_remote_import_cron_schedules($schedules) {
+ $schedules['aoam_every_five_minutes'] = array(
+ 'interval' => 300,
+ 'display' => 'Every 5 minutes',
+ );
+ return $schedules;
+}
+
+add_action('init', 'aoam_schedule_remote_order_import');
+function aoam_schedule_remote_order_import() {
+ $next_run = wp_next_scheduled('aoam_remote_order_import_cron');
+ if ($next_run && wp_get_schedule('aoam_remote_order_import_cron') !== 'aoam_every_five_minutes') {
+ wp_clear_scheduled_hook('aoam_remote_order_import_cron');
+ $next_run = false;
+ }
+ if (!$next_run) {
+ wp_schedule_event(time() + 300, 'aoam_every_five_minutes', 'aoam_remote_order_import_cron');
+ }
+ if (!wp_next_scheduled('aoam_delayed_assignment_fallback_cron')) {
+ wp_schedule_event(time() + 300, 'aoam_every_five_minutes', 'aoam_delayed_assignment_fallback_cron');
+ }
+}
+
+add_action('aoam_remote_order_import_cron', 'aoam_import_remote_orders_cron');
+function aoam_import_remote_orders_cron() {
+ $settings = aoam_get_remote_import_settings();
+ if (($settings['enabled'] ?? 'yes') !== 'yes') {
+ return;
+ }
+ $result = aoam_import_remote_orders();
+ update_option('aoam_remote_import_last_run', array(
+ 'time' => current_time('mysql'),
+ 'result' => is_wp_error($result) ? $result->get_error_message() : $result,
+ ));
+}
+
+function aoam_sanitize_remote_import_sources($raw_sources) {
+ $sources = array();
+ if (!is_array($raw_sources)) {
+ return $sources;
+ }
+ foreach ($raw_sources as $source) {
+ $site_url = esc_url_raw(trim($source['site_url'] ?? ''));
+ $consumer_key = sanitize_text_field($source['consumer_key'] ?? '');
+ $consumer_secret = sanitize_text_field($source['consumer_secret'] ?? '');
+ if (empty($site_url) || empty($consumer_key) || empty($consumer_secret)) {
+ continue;
+ }
+ $sources[] = array(
+ 'site_url' => $site_url,
+ 'consumer_key' => $consumer_key,
+ 'consumer_secret' => $consumer_secret,
+ 'statuses' => sanitize_text_field($source['statuses'] ?? 'processing,pending,on-hold'),
+ 'per_page' => max(1, min(100, absint($source['per_page'] ?? 20))),
+ 'enabled' => !empty($source['enabled']) ? 'yes' : 'no',
+ );
+ }
+ return $sources;
+}
+
+function aoam_remote_order_import_page() {
+ if (!current_user_can('manage_options')) {
+ wp_die('You do not have permission to access this page.');
+ }
+
+ $settings = aoam_get_remote_import_settings();
+ $message = '';
+ $import_result = null;
+
+ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aoam_save_remote_import'])) {
+ check_admin_referer('aoam_remote_import_settings', 'aoam_remote_import_nonce');
+ $settings['enabled'] = !empty($_POST['enabled']) ? 'yes' : 'no';
+ $settings['sources'] = aoam_sanitize_remote_import_sources($_POST['sources'] ?? array());
+ update_option('aoam_remote_import_settings', $settings);
+ $message = 'Remote import settings saved.';
+ }
+
+ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aoam_run_remote_import'])) {
+ check_admin_referer('aoam_remote_import_run', 'aoam_remote_import_run_nonce');
+ $import_result = aoam_import_remote_orders();
+ }
+ ?>
+ <div class="wrap">
+ <h1>Remote Order Import</h1>
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-settings')); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-recent-assignments')); ?>" class="nav-tab">Recent Assignments</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-sequence-status')); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-product-assignments')); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-reassign-orders')); ?>" class="nav-tab">Reassign</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-plugin-settings')); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-remote-import')); ?>" class="nav-tab nav-tab-active">Remote Import</a>
+ </div>
+
+ <?php if ($message): ?>
+ <div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div>
+ <?php endif; ?>
+
+ <?php if (is_wp_error($import_result)): ?>
+ <div class="notice notice-error"><p><?php echo esc_html($import_result->get_error_message()); ?></p></div>
+ <?php elseif (is_array($import_result)): ?>
+ <div class="notice notice-success"><p>
+ Imported: <?php echo esc_html($import_result['imported']); ?>,
+ Skipped: <?php echo esc_html($import_result['skipped']); ?>,
+ Failed: <?php echo esc_html($import_result['failed']); ?>
+ </p></div>
+ <?php endif; ?>
+
+ <div class="card" style="max-width: 1100px;">
+ <h2>Remote WooCommerce API Sources</h2>
+ <form method="post">
+ <?php wp_nonce_field('aoam_remote_import_settings', 'aoam_remote_import_nonce'); ?>
+ <p><label><input type="checkbox" name="enabled" value="1" <?php checked(($settings['enabled'] ?? 'yes'), 'yes'); ?>> Enable automatic import every 5 minutes</label></p>
+ <?php
+ $sources = $settings['sources'];
+ $target_source_rows = max(5, count($sources) + 1);
+ for ($i = count($sources); $i < $target_source_rows; $i++) {
+ $sources[] = array('site_url' => '', 'consumer_key' => '', 'consumer_secret' => '', 'statuses' => 'processing,pending,on-hold', 'per_page' => 20, 'enabled' => 'yes');
+ }
+ ?>
+ <div style="overflow-x:auto;">
+ <table class="widefat striped">
+ <thead>
+ <tr>
+ <th>On</th>
+ <th>Source Site URL</th>
+ <th>Consumer Key</th>
+ <th>Consumer Secret</th>
+ <th>Statuses</th>
+ <th>Limit</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php foreach ($sources as $index => $source): ?>
+ <tr>
+ <td><input type="checkbox" name="sources[<?php echo esc_attr($index); ?>][enabled]" value="1" <?php checked(($source['enabled'] ?? 'yes'), 'yes'); ?>></td>
+ <td><input type="url" name="sources[<?php echo esc_attr($index); ?>][site_url]" value="<?php echo esc_attr($source['site_url'] ?? ''); ?>" placeholder="https://example.com" style="width: 220px;"></td>
+ <td><input type="text" name="sources[<?php echo esc_attr($index); ?>][consumer_key]" value="<?php echo esc_attr($source['consumer_key'] ?? ''); ?>" style="width: 180px;"></td>
+ <td><input type="password" name="sources[<?php echo esc_attr($index); ?>][consumer_secret]" value="<?php echo esc_attr($source['consumer_secret'] ?? ''); ?>" style="width: 180px;"></td>
+ <td><input type="text" name="sources[<?php echo esc_attr($index); ?>][statuses]" value="<?php echo esc_attr($source['statuses'] ?? 'processing,pending,on-hold'); ?>" style="width: 180px;"></td>
+ <td><input type="number" min="1" max="100" name="sources[<?php echo esc_attr($index); ?>][per_page]" value="<?php echo esc_attr($source['per_page'] ?? 20); ?>" style="width: 70px;"></td>
+ </tr>
+ <?php endforeach; ?>
+ </tbody>
+ </table>
+ </div>
+ <p class="description">Add one source per row. Leave unused rows empty. Imported orders are duplicate-protected per source.</p>
+ <p><button type="submit" name="aoam_save_remote_import" class="button button-primary">Save Settings</button></p>
+ </form>
+ </div>
+
+ <div class="card" style="max-width: 900px;">
+ <h2>Manual Import</h2>
+ <p>Imports remote orders into this WooCommerce site. Imported orders are assigned by this plugin after creation.</p>
+ <form method="post">
+ <?php wp_nonce_field('aoam_remote_import_run', 'aoam_remote_import_run_nonce'); ?>
+ <button type="submit" name="aoam_run_remote_import" class="button button-primary">Run Import Now</button>
+ </form>
+ </div>
+ </div>
+ <?php
+}
+
+function aoam_import_remote_orders($source_settings = null) {
+ $settings = $source_settings ?: aoam_get_remote_import_settings();
+ if ($source_settings === null && !empty($settings['sources'])) {
+ $total = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
+ foreach ($settings['sources'] as $source) {
+ if (($source['enabled'] ?? 'yes') !== 'yes') {
+ continue;
+ }
+ $source_result = aoam_import_remote_orders($source);
+ if (is_wp_error($source_result)) {
+ $total['failed']++;
+ continue;
+ }
+ $total['imported'] += (int) $source_result['imported'];
+ $total['skipped'] += (int) $source_result['skipped'];
+ $total['failed'] += (int) $source_result['failed'];
+ }
+ return $total;
+ }
+ if (empty($settings['site_url']) || empty($settings['consumer_key']) || empty($settings['consumer_secret'])) {
+ return new WP_Error('aoam_missing_remote_settings', 'Remote site URL, consumer key, and consumer secret are required.');
+ }
+
+ $statuses = array_filter(array_map('sanitize_key', explode(',', $settings['statuses'])));
+ if (empty($statuses)) {
+ $statuses = array('processing');
+ }
+
+ $endpoint = trailingslashit($settings['site_url']) . 'wp-json/wc/v3/orders';
+ $url = add_query_arg(array(
+ 'per_page' => max(1, min(100, absint($settings['per_page']))),
+ 'orderby' => 'date',
+ 'order' => 'asc',
+ 'status' => implode(',', $statuses),
+ ), $endpoint);
+
+ $response = wp_remote_get($url, array(
+ 'timeout' => 30,
+ 'headers' => array(
+ 'Authorization' => 'Basic ' . base64_encode($settings['consumer_key'] . ':' . $settings['consumer_secret']),
+ ),
+ ));
+ if (is_wp_error($response)) {
+ return $response;
+ }
+ $code = wp_remote_retrieve_response_code($response);
+ if ($code < 200 || $code >= 300) {
+ return new WP_Error('aoam_remote_import_http_error', 'Remote API returned HTTP ' . $code . '.');
+ }
+
+ $orders = json_decode(wp_remote_retrieve_body($response), true);
+ if (!is_array($orders)) {
+ return new WP_Error('aoam_remote_import_bad_json', 'Remote API response was not valid JSON.');
+ }
+
+ $result = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
+ foreach ($orders as $remote_order) {
+ if (empty($remote_order['id'])) {
+ $result['failed']++;
+ continue;
+ }
+ $created = aoam_create_order_from_remote_order($remote_order, $settings['site_url']);
+ if (is_wp_error($created)) {
+ if ($created->get_error_code() === 'aoam_remote_order_exists') {
+ $result['skipped']++;
+ } else {
+ $result['failed']++;
+ }
+ continue;
+ }
+ $result['imported']++;
+ }
+
+ return $result;
+}
+
+function aoam_create_order_from_remote_order($remote_order, $source_url) {
+ $source_key = md5(untrailingslashit($source_url));
+ $remote_id = absint($remote_order['id']);
+ $existing = wc_get_orders(array(
+ 'limit' => 1,
+ 'return' => 'ids',
+ 'meta_key' => '_aoam_remote_order_key',
+ 'meta_value' => $source_key . ':' . $remote_id,
+ ));
+ if (!empty($existing)) {
+ return new WP_Error('aoam_remote_order_exists', 'Remote order already imported.');
+ }
+
+ try {
+ $order = wc_create_order();
+ if (!$order) {
+ return new WP_Error('aoam_order_create_failed', 'Could not create local order.');
+ }
+
+ $billing = $remote_order['billing'] ?? array();
+ $shipping = $remote_order['shipping'] ?? array();
+ foreach (array('first_name','last_name','company','address_1','address_2','city','state','postcode','country','email','phone') as $field) {
+ if (isset($billing[$field]) && method_exists($order, 'set_billing_' . $field)) {
+ $order->{'set_billing_' . $field}($billing[$field]);
+ }
+ }
+ foreach (array('first_name','last_name','company','address_1','address_2','city','state','postcode','country','phone') as $field) {
+ if (isset($shipping[$field]) && method_exists($order, 'set_shipping_' . $field)) {
+ $order->{'set_shipping_' . $field}($shipping[$field]);
+ }
+ }
+
+ if (!empty($remote_order['line_items']) && is_array($remote_order['line_items'])) {
+ foreach ($remote_order['line_items'] as $line_item) {
+ aoam_add_remote_line_item_to_order($order, $line_item);
+ }
+ }
+
+ if (!empty($remote_order['shipping_lines']) && is_array($remote_order['shipping_lines'])) {
+ foreach ($remote_order['shipping_lines'] as $shipping_line) {
+ $item = new WC_Order_Item_Shipping();
+ $item->set_method_title($shipping_line['method_title'] ?? 'Shipping');
+ $item->set_total((float) ($shipping_line['total'] ?? 0));
+ $order->add_item($item);
+ }
+ }
+
+ $order->set_currency($remote_order['currency'] ?? get_woocommerce_currency());
+ $order->set_payment_method($remote_order['payment_method'] ?? '');
+ $order->set_payment_method_title($remote_order['payment_method_title'] ?? '');
+ if (!empty($remote_order['customer_note'])) {
+ $order->set_customer_note($remote_order['customer_note']);
+ }
+
+ $order->calculate_totals();
+ $status = sanitize_key($remote_order['status'] ?? 'processing');
+ $order->update_status($status, 'Imported from remote WooCommerce order #' . $remote_id . '.');
+ $order->update_meta_data('_aoam_remote_order_id', $remote_id);
+ $order->update_meta_data('_aoam_remote_order_source', esc_url_raw($source_url));
+ $order->update_meta_data('_aoam_remote_order_key', $source_key . ':' . $remote_id);
+ $order->save();
+
+ assign_order_to_specific_moderator($order->get_id(), $order, false);
+ return $order->get_id();
+ } catch (Exception $e) {
+ return new WP_Error('aoam_remote_order_exception', $e->getMessage());
+ }
+}
+
+function aoam_add_remote_line_item_to_order($order, $line_item) {
+ $quantity = max(1, absint($line_item['quantity'] ?? 1));
+ $sku = sanitize_text_field($line_item['sku'] ?? '');
+ $product = $sku ? wc_get_product_id_by_sku($sku) : 0;
+ $product = $product ? wc_get_product($product) : false;
+
+ if ($product) {
+ $order->add_product($product, $quantity, array(
+ 'subtotal' => (float) ($line_item['subtotal'] ?? $line_item['total'] ?? 0),
+ 'total' => (float) ($line_item['total'] ?? 0),
+ ));
+ return;
+ }
+
+ $item = new WC_Order_Item_Product();
+ $item->set_name(sanitize_text_field($line_item['name'] ?? 'Remote Product'));
+ $item->set_quantity($quantity);
+ $item->set_subtotal((float) ($line_item['subtotal'] ?? $line_item['total'] ?? 0));
+ $item->set_total((float) ($line_item['total'] ?? 0));
+ if ($sku) {
+ $item->add_meta_data('Remote SKU', $sku, true);
+ }
+ if (!empty($line_item['product_id'])) {
+ $item->add_meta_data('Remote Product ID', absint($line_item['product_id']), true);
+ }
+ $order->add_item($item);
+}
+
+add_action('woocommerce_order_status_changed', 'aoam_sync_imported_order_status_to_remote', 20, 4);
+function aoam_sync_imported_order_status_to_remote($order_id, $from_status, $to_status, $order) {
+ if (!$order || !is_a($order, 'WC_Order')) {
+ return;
+ }
+
+ $remote_id = $order->get_meta('_aoam_remote_order_id');
+ $source_url = $order->get_meta('_aoam_remote_order_source');
+ if (empty($remote_id) || empty($source_url)) {
+ $remote_id = get_post_meta($order_id, '_aoam_remote_order_id', true);
+ $source_url = get_post_meta($order_id, '_aoam_remote_order_source', true);
+ }
+ if (empty($remote_id) || empty($source_url)) {
+ return;
+ }
+
+ $source = aoam_find_remote_import_source($source_url);
+ if (!$source) {
+ $order->add_order_note('Remote status sync skipped: source API credentials not found.');
+ return;
+ }
+
+ $endpoint = trailingslashit($source['site_url']) . 'wp-json/wc/v3/orders/' . absint($remote_id);
+ $response = wp_remote_request($endpoint, array(
+ 'method' => 'PUT',
+ 'timeout' => 30,
+ 'headers' => array(
+ 'Authorization' => 'Basic ' . base64_encode($source['consumer_key'] . ':' . $source['consumer_secret']),
+ 'Content-Type' => 'application/json',
+ ),
+ 'body' => wp_json_encode(array('status' => sanitize_key($to_status))),
+ ));
+
+ if (is_wp_error($response)) {
+ $order->add_order_note('Remote status sync failed: ' . $response->get_error_message());
+ return;
+ }
+
+ $code = wp_remote_retrieve_response_code($response);
+ if ($code < 200 || $code >= 300) {
+ $order->add_order_note('Remote status sync failed with HTTP ' . $code . '.');
+ return;
+ }
+
+ $order->add_order_note('Remote order #' . absint($remote_id) . ' status synced to ' . sanitize_key($to_status) . '.');
+}
+
+function aoam_find_remote_import_source($source_url) {
+ $settings = aoam_get_remote_import_settings();
+ $source_url_normalized = untrailingslashit(esc_url_raw($source_url));
+ foreach (($settings['sources'] ?? array()) as $source) {
+ if (empty($source['site_url']) || empty($source['consumer_key']) || empty($source['consumer_secret'])) {
+ continue;
+ }
+ if (untrailingslashit(esc_url_raw($source['site_url'])) === $source_url_normalized) {
+ return $source;
+ }
+ }
+ if (!empty($settings['site_url']) && untrailingslashit(esc_url_raw($settings['site_url'])) === $source_url_normalized) {
+ return $settings;
+ }
+ return false;
+}
+
+// Create moderator role if it doesn't exist - ENHANCED VERSION
+function create_moderator_role_if_not_exists() {
+ if (!get_role('moderator')) {
+ // Copy capabilities from subscriber role as base
+ $subscriber_caps = get_role('subscriber')->capabilities;
+ 
+ // Enhanced WooCommerce and WordPress capabilities for moderators
+ $moderator_caps = array_merge($subscriber_caps, [
+ // WordPress core capabilities
+ 'read' => true,
+ 'upload_files' => true,
+ 'edit_posts' => true,
+ 
+ // WooCommerce order capabilities
+ 'read_private_shop_orders' => true,
+ 'edit_shop_orders' => true,
+ 'edit_others_shop_orders' => true,
+ 'edit_private_shop_orders' => true,
+ 'edit_published_shop_orders' => true,
+ 'read_shop_orders' => true,
+ 'publish_shop_orders' => true,
+ 'delete_shop_orders' => true,
+ 'delete_private_shop_orders' => true,
+ 'delete_published_shop_orders' => true,
+ 'delete_others_shop_orders' => true,
+ 
+ // WooCommerce product capabilities (read-only)
+ 'read_private_products' => true,
+ 'read_products' => true,
+ 
+ // User capabilities
+ 'edit_users' => true,
+ 'list_users' => true,
+ 
+ // Custom capabilities for our system
+ 'manage_moderator_orders' => true,
+ 'view_assigned_orders' => true,
+ ]);
+ 
+ // Create the moderator role
+ add_role('moderator', 'Moderator', $moderator_caps);
+ 
+ } else {
+ // ADD: Update existing moderator role with missing capabilities
+ $moderator_role = get_role('moderator');
+ 
+ // Add missing capabilities to existing role
+ $missing_caps = [
+ 'edit_shop_orders' => true,
+ 'edit_others_shop_orders' => true,
+ 'edit_private_shop_orders' => true,
+ 'edit_published_shop_orders' => true,
+ 'publish_shop_orders' => true,
+ 'delete_shop_orders' => true,
+ 'delete_private_shop_orders' => true,
+ 'delete_published_shop_orders' => true,
+ 'delete_others_shop_orders' => true,
+ 'edit_users' => true,
+ 'list_users' => true,
+ ];
+ 
+ foreach ($missing_caps as $cap => $grant) {
+ if (!$moderator_role->has_cap($cap)) {
+ $moderator_role->add_cap($cap, $grant);
+ }
+ }
+ 
+ }
+}
+
+// Run on plugin activation and admin init
+add_action('admin_init', 'create_moderator_role_if_not_exists');
+add_action('wp_loaded', 'create_moderator_role_if_not_exists');
+
+register_activation_hook(__FILE__, 'aoam_activate_plugin');
+function aoam_activate_plugin() {
+ create_moderator_role_if_not_exists();
+ flush_rewrite_rules();
+}
+
+// Fix moderator admin access
+function fix_moderator_admin_access() {
+ $current_user = wp_get_current_user();
+ 
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role && !current_user_can('manage_options')) {
+ if (!current_user_can('edit_posts') && !current_user_can('read_shop_orders')) {
+ $current_user->add_cap('read');
+ $current_user->add_cap('read_shop_orders');
+ $current_user->add_cap('edit_shop_orders');
+ }
+ }
+}
+add_action('admin_init', 'fix_moderator_admin_access', 1);
+
+// Fix admin menu visibility for moderators
+function fix_moderator_admin_menu() {
+ $current_user = wp_get_current_user();
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role && !current_user_can('manage_options')) {
+ if (!current_user_can('edit_posts')) {
+ $current_user->add_cap('read');
+ }
+ }
+}
+add_action('wp_loaded', 'fix_moderator_admin_menu');
+
+// ====================================================
+// FIXED: Enhanced assignment with 5-minute delay for partial orders
+// ====================================================
+
+// FIXED: Enhanced assignment with 5-minute delay for partial orders
+add_action('woocommerce_new_order', 'schedule_order_assignment', 10, 2);
+
+function aoam_get_delayed_assignment_statuses() {
+ return array('partial', 'pending', 'on-hold', 'failed');
+}
+
+function aoam_get_delayed_assignment_seconds() {
+ return 600;
+}
+
+function aoam_get_order_local_timestamp($order) {
+ if (!$order || !is_a($order, 'WC_Order')) {
+ return false;
+ }
+
+ $date_created = $order->get_date_created();
+ if (!$date_created) {
+ return false;
+ }
+
+ return $date_created->getTimestamp() + $date_created->getOffset();
+}
+
+function aoam_format_order_local_date($order, $format) {
+ $timestamp = aoam_get_order_local_timestamp($order);
+ if (!$timestamp) {
+ return '';
+ }
+
+ return wp_date($format, $timestamp);
+}
+
+function aoam_order_has_moderator_assignment($order_id) {
+ $order_id = absint($order_id);
+ if (!$order_id) {
+ return false;
+ }
+
+ $assigned_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ if (!empty($assigned_moderator_id)) {
+ return true;
+ }
+
+ $order = function_exists('wc_get_order') ? wc_get_order($order_id) : false;
+ if ($order && is_a($order, 'WC_Order')) {
+ return !empty($order->get_meta('_assigned_moderator_id', true));
+ }
+
+ return false;
+}
+
+function aoam_schedule_delayed_assignment($order_id, $order = null, $reason = '') {
+ $order_id = absint($order_id);
+ if (!$order_id) {
+ return false;
+ }
+
+ if (aoam_order_has_moderator_assignment($order_id)) {
+ return false;
+ }
+
+ wp_clear_scheduled_hook('assign_order_to_specific_moderator_delayed', array($order_id));
+ wp_schedule_single_event(time() + aoam_get_delayed_assignment_seconds(), 'assign_order_to_specific_moderator_delayed', array($order_id));
+
+ if ($order && is_a($order, 'WC_Order')) {
+ $order->add_order_note('Order assignment delayed for 10 minutes' . ($reason ? ': ' . $reason : '') . '.');
+ }
+
+ return true;
+}
+
+function schedule_order_assignment($order_id, $order) {
+ // Get order status
+ $order_status = $order->get_status();
+  
+ // Define which statuses should be delayed for 10 minutes
+ $partial_statuses = aoam_get_delayed_assignment_statuses();
+ $immediate_statuses = array('processing', 'completed', 'refunded'); // Statuses that trigger immediate assignment
+  
+ if (in_array($order_status, $partial_statuses)) {
+ aoam_schedule_delayed_assignment($order_id, $order, 'status ' . $order_status);
+ } elseif (in_array($order_status, $immediate_statuses)) {
+ // Assign immediately for complete statuses
+ assign_order_to_specific_moderator($order_id, $order);
+ }
+}
+
+// ====================================================
+// SHIFT TIME CHECK FUNCTIONS
+// ====================================================
+
+// Check if user is in any of their assigned shifts - FIXED VERSION
+function is_user_in_any_shift($user_id) {
+ $status = get_user_meta($user_id, 'moderator_status', true);
+ 
+ // If status is inactive, return false immediately
+ if ($status === 'inactive') {
+ return false;
+ }
+ 
+ // Get user's assigned shifts
+ $assigned_shifts = get_user_meta($user_id, 'moderator_assigned_shifts', true);
+ 
+ // If no shifts assigned, user is always available
+ if (empty($assigned_shifts) || !is_array($assigned_shifts)) {
+ return array(
+ 'in_shift' => true,
+ 'shift_key' => 'always_active',
+ 'shift_name' => 'Always Active',
+ 'shift_color' => '#46b450'
+ );
+ }
+ 
+ // Get current time
+ $current_time = current_time('H:i');
+ $current_hour = (int)date('H', strtotime($current_time));
+ $current_minute = (int)date('i', strtotime($current_time));
+ $current_decimal = $current_hour + ($current_minute / 60);
+ 
+ // Get shift settings
+ $shift_settings = aoam_get_shift_settings();
+ 
+ // Check each assigned shift
+ foreach ($assigned_shifts as $shift_key) {
+ if (isset($shift_settings[$shift_key])) {
+ $shift = $shift_settings[$shift_key];
+ 
+ // Parse start time
+ $start_time = $shift['start'];
+ list($start_hour, $start_minute) = explode(':', $start_time);
+ $start_hour = (int)$start_hour;
+ $start_minute = (int)$start_minute;
+ $start_decimal = $start_hour + ($start_minute / 60);
+ 
+ // Parse end time
+ $end_time = $shift['end'];
+ list($end_hour, $end_minute) = explode(':', $end_time);
+ $end_hour = (int)$end_hour;
+ $end_minute = (int)$end_minute;
+ $end_decimal = $end_hour + ($end_minute / 60);
+ 
+ // Handle overnight shifts (end time is earlier than start time)
+ if ($end_decimal < $start_decimal) {
+ // Shift crosses midnight (e.g., 22:01 to 02:00)
+ // Current time is either >= start time OR <= end time
+ if ($current_decimal >= $start_decimal || $current_decimal <= $end_decimal) {
+ return array(
+ 'in_shift' => true,
+ 'shift_key' => $shift_key,
+ 'shift_name' => $shift['name'],
+ 'shift_color' => $shift['color']
+ );
+ }
+ } else {
+ // Normal shift within same day
+ if ($current_decimal >= $start_decimal && $current_decimal <= $end_decimal) {
+ return array(
+ 'in_shift' => true,
+ 'shift_key' => $shift_key,
+ 'shift_name' => $shift['name'],
+ 'shift_color' => $shift['color']
+ );
+ }
+ }
+ }
+ }
+ 
+ return false;
+}
+
+
+// Get user's assigned shifts
+function get_user_assigned_shifts($user_id) {
+ $assigned_shifts = get_user_meta($user_id, 'moderator_assigned_shifts', true);
+ if (empty($assigned_shifts) || !is_array($assigned_shifts)) {
+ return array();
+ }
+ 
+ $shift_settings = aoam_get_shift_settings();
+ $user_shifts = array();
+ 
+ foreach ($assigned_shifts as $shift_key) {
+ if (isset($shift_settings[$shift_key])) {
+ $user_shifts[$shift_key] = $shift_settings[$shift_key];
+ }
+ }
+ 
+ return $user_shifts;
+}
+
+
+// Hook for the delayed assignment
+add_action('assign_order_to_specific_moderator_delayed', 'assign_order_to_specific_moderator_delayed_handler');
+
+function assign_order_to_specific_moderator_delayed_handler($order_id) {
+ $order = wc_get_order($order_id);
+ 
+ // Check if order still exists
+ if (!$order) {
+ return;
+ }
+ 
+ // Check if order is already assigned
+ $already_assigned = get_post_meta($order_id, '_assigned_moderator_id', true);
+ if ($already_assigned) {
+ return;
+ }
+ 
+ // Check if order is still in a partial status
+ $order_status = $order->get_status();
+ $partial_statuses = aoam_get_delayed_assignment_statuses();
+ 
+ if (in_array($order_status, $partial_statuses)) {
+ assign_order_to_specific_moderator($order_id, $order, true);
+ } else {
+ // If status changed to complete, assign immediately
+ assign_order_to_specific_moderator($order_id, $order, false);
+ }
+}
+
+add_action('aoam_delayed_assignment_fallback_cron', 'aoam_run_delayed_assignment_fallback');
+add_action('init', 'aoam_maybe_run_delayed_assignment_fallback', 30);
+
+function aoam_maybe_run_delayed_assignment_fallback() {
+ if (get_transient('aoam_delayed_assignment_fallback_lock')) {
+ return;
+ }
+
+ set_transient('aoam_delayed_assignment_fallback_lock', 1, 240);
+ aoam_run_delayed_assignment_fallback();
+ aoam_cleanup_stale_delayed_assignment_events();
+}
+
+function aoam_run_delayed_assignment_fallback() {
+ global $wpdb;
+
+ if (!function_exists('wc_get_order')) {
+ return;
+ }
+
+ $order_ids = array();
+ $delayed_statuses = aoam_get_delayed_assignment_statuses();
+ $cutoff_gmt = gmdate('Y-m-d H:i:s', time() - aoam_get_delayed_assignment_seconds());
+ $orders_table = $wpdb->prefix . 'wc_orders';
+ $orders_meta_table = $wpdb->prefix . 'wc_orders_meta';
+ $orders_table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $orders_table));
+ $orders_meta_table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $orders_meta_table));
+
+ if ($orders_table_exists === $orders_table) {
+ $wc_statuses = array_map(function($status) {
+ return 'wc-' . $status;
+ }, $delayed_statuses);
+ $placeholders = implode(',', array_fill(0, count($wc_statuses), '%s'));
+ $orders_meta_join = '';
+ $orders_meta_where = '';
+ if ($orders_meta_table_exists === $orders_meta_table) {
+ $orders_meta_join = "
+ LEFT JOIN {$orders_meta_table} assigned_om
+ ON assigned_om.order_id = o.id
+ AND assigned_om.meta_key = '_assigned_moderator_id'
+ ";
+ $orders_meta_where = 'AND assigned_om.id IS NULL';
+ }
+ $sql = "
+ SELECT o.id
+ FROM {$orders_table} o
+ LEFT JOIN {$wpdb->postmeta} assigned_pm
+ ON assigned_pm.post_id = o.id
+ AND assigned_pm.meta_key = '_assigned_moderator_id'
+ {$orders_meta_join}
+ WHERE o.type = 'shop_order'
+ AND o.status IN ({$placeholders})
+ AND (o.date_created_gmt <= %s OR o.date_created_gmt IS NULL)
+ AND assigned_pm.meta_id IS NULL
+ {$orders_meta_where}
+ ORDER BY o.date_created_gmt DESC
+ LIMIT 100
+ ";
+ $order_ids = $wpdb->get_col($wpdb->prepare($sql, array_merge($wc_statuses, array($cutoff_gmt))));
+ } else {
+ $orders = wc_get_orders(array(
+ 'status' => $delayed_statuses,
+ 'limit' => 100,
+ 'orderby' => 'date',
+ 'order' => 'DESC',
+ 'date_created' => '<=' . (time() - aoam_get_delayed_assignment_seconds()),
+ 'meta_query' => array(
+ array(
+ 'key' => '_assigned_moderator_id',
+ 'compare' => 'NOT EXISTS',
+ ),
+ ),
+ ));
+ foreach ($orders as $order) {
+ $order_ids[] = $order->get_id();
+ }
+ }
+
+ foreach ($order_ids as $order_id) {
+ $order = wc_get_order($order_id);
+ if (!$order || aoam_order_has_moderator_assignment($order_id)) {
+ continue;
+ }
+ if (in_array($order->get_status(), $delayed_statuses)) {
+ assign_order_to_specific_moderator($order_id, $order, true);
+ $order->add_order_note('Fallback delayed assignment ran after the scheduled event was missed.');
+ }
+ }
+}
+
+function aoam_cleanup_stale_delayed_assignment_events() {
+ if (!function_exists('_get_cron_array') || !function_exists('_set_cron_array')) {
+ return;
+ }
+
+ $cron = _get_cron_array();
+ if (!is_array($cron)) {
+ return;
+ }
+
+ $hook = 'assign_order_to_specific_moderator_delayed';
+ $cutoff = time() - 60;
+ $changed = false;
+
+ foreach ($cron as $timestamp => $hooks) {
+ if ((int) $timestamp > $cutoff || empty($hooks[$hook])) {
+ continue;
+ }
+
+ unset($cron[$timestamp][$hook]);
+ if (empty($cron[$timestamp])) {
+ unset($cron[$timestamp]);
+ }
+ $changed = true;
+ }
+
+ if ($changed) {
+ _set_cron_array($cron);
+ }
+}
+
+// Also run assignment immediately when order status changes to complete statuses
+add_action('woocommerce_order_status_changed', 'handle_order_status_change_assignment', 10, 4);
+
+function handle_order_status_change_assignment($order_id, $from_status, $to_status, $order) {
+ // Define statuses that should trigger immediate assignment
+ $immediate_statuses = array('processing', 'completed');
+ $delayed_statuses = aoam_get_delayed_assignment_statuses();
+ $already_assigned = aoam_order_has_moderator_assignment($order_id);
+ 
+ if (in_array($to_status, $immediate_statuses)) {
+ wp_clear_scheduled_hook('assign_order_to_specific_moderator_delayed', array($order_id));
+ if (!$already_assigned) {
+ assign_order_to_specific_moderator($order_id, $order, false);
+ }
+ } elseif (in_array($to_status, $delayed_statuses) && !$already_assigned) {
+ aoam_schedule_delayed_assignment($order_id, $order, 'status changed to ' . $to_status);
+ }
+}
+
+// Cleanup function for scheduled events
+function cleanup_moderator_assignment_schedules($order_id) {
+ // Clear any scheduled assignments for this order
+ wp_clear_scheduled_hook('assign_order_to_specific_moderator_delayed', array($order_id));
+}
+
+// Add cleanup when order is completed or cancelled
+add_action('woocommerce_order_status_completed', 'cleanup_moderator_assignment_schedules');
+add_action('woocommerce_order_status_cancelled', 'cleanup_moderator_assignment_schedules');
+add_action('woocommerce_order_status_refunded', 'cleanup_moderator_assignment_schedules');
+
+// ====================================================
+// NEW: SHIFT TIME CHECK FUNCTION
+// ====================================================
+
+function is_user_in_shift_time($user_id) {
+ $status = get_user_meta($user_id, 'moderator_status', true);
+ 
+ // If status is inactive, return false immediately
+ if ($status === 'inactive') {
+ return false;
+ }
+ 
+ // If status is active but no shift time is set, consider always active
+ $shift_start = get_user_meta($user_id, 'moderator_shift_start', true);
+ $shift_end = get_user_meta($user_id, 'moderator_shift_end', true);
+ 
+ // If no shift time is set, user is always available
+ if (empty($shift_start) || empty($shift_end)) {
+ return true;
+ }
+ 
+ // Get current time
+ $current_time = current_time('H:i');
+ 
+ // Convert times to comparable format
+ $current_timestamp = strtotime($current_time);
+ $start_timestamp = strtotime($shift_start);
+ $end_timestamp = strtotime($shift_end);
+ 
+ // Handle overnight shifts (e.g., 22:00 to 06:00)
+ if ($end_timestamp < $start_timestamp) {
+ // Shift crosses midnight
+ if ($current_timestamp >= $start_timestamp || $current_timestamp <= $end_timestamp) {
+ return true;
+ }
+ } else {
+ // Normal shift within same day
+ if ($current_timestamp >= $start_timestamp && $current_timestamp <= $end_timestamp) {
+ return true;
+ }
+ }
+ 
+ return false;
+}
+
+// ====================================================
+// NEW FUNCTION: GET SEQUENCE BASED ON ORDER STATUS
+// ====================================================
+
+function get_sequence_for_order_status($order_status) {
+ // Define which statuses have their own sequences
+ $status_sequences = array(
+ 'partial' => 'last_assigned_partial_moderator_sequence',
+ 'processing' => 'last_assigned_processing_moderator_sequence',
+ // Add more statuses here if needed
+ );
+ 
+ return isset($status_sequences[$order_status]) ? $status_sequences[$order_status] : 'last_assigned_general_moderator_sequence';
+}
+
+// ====================================================
+// NEW FUNCTION: RESET ALL SEQUENCES (Admin Tool)
+// ====================================================
+
+function reset_all_sequences_tool() {
+ if (isset($_POST['reset_all_sequences']) && current_user_can('manage_options')) {
+ // Reset all sequence options
+ update_option('last_assigned_general_moderator_sequence', 0);
+ update_option('last_assigned_partial_moderator_sequence', 0);
+ update_option('last_assigned_processing_moderator_sequence', 0);
+ 
+ // Also reset all product-specific sequences
+ global $wpdb;
+ $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'last_assigned_moderator_sequence_products_%'");
+ 
+ echo '<div class="notice notice-success"><p>All assignment sequences have been reset!</p></div>';
+ }
+}
+
+// Add this to your admin page
+add_action('admin_init', 'reset_all_sequences_tool');
+
+// ====================================================
+// UPDATED ASSIGNMENT FUNCTION WITH SEPARATE SEQUENCES FOR PARTIAL & PROCESSING
+// ====================================================
+
+function assign_order_to_specific_moderator($order_id, $order, $delayed = false) {
+ // Get order items to determine products
+ $items = $order->get_items();
+ $product_ids = array();
+ 
+ foreach ($items as $item) {
+ $product_ids[] = $item->get_product_id();
+ }
+ 
+ // Sort product IDs to maintain consistent key
+ sort($product_ids);
+ 
+ // Get order status
+ $order_status = $order->get_status();
+ 
+ // Get all active users with assigned roles ordered by SEQUENCE
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ $user_args = array(
+ 'role__in' => $assigned_roles,
+ 'meta_query' => array(
+ 'relation' => 'AND',
+ array(
+ 'key' => 'moderator_sequence',
+ 'type' => 'NUMERIC',
+ 'compare' => 'EXISTS'
+ ),
+ array(
+ 'key' => 'moderator_status',
+ 'value' => 'active',
+ 'compare' => '='
+ )
+ ),
+ 'orderby' => 'meta_value_num',
+ 'meta_key' => 'moderator_sequence',
+ 'order' => 'ASC',
+ 'number' => 50
+ );
+ 
+ $users = get_users($user_args);
+ 
+ // If no active users with sequence, try without status filter
+ if (empty($users)) {
+ $user_args['meta_query'] = array(
+ array(
+ 'key' => 'moderator_sequence',
+ 'type' => 'NUMERIC',
+ 'compare' => 'EXISTS'
+ )
+ );
+ $users = get_users($user_args);
+ }
+ 
+ // If still no users, try by registration date
+ if (empty($users)) {
+ $user_args = array(
+ 'role__in' => $assigned_roles,
+ 'orderby' => 'user_registered',
+ 'order' => 'ASC',
+ 'number' => 50
+ );
+ 
+ $users = get_users($user_args);
+ 
+ // Add sequence numbers based on registration order
+ $sequence = 1;
+ foreach ($users as $user) {
+ update_user_meta($user->ID, 'moderator_sequence', $sequence);
+ $sequence++;
+ }
+ }
+ 
+ if (empty($users)) {
+ $order->add_order_note('No eligible users found for assignment.');
+ return;
+ }
+ 
+ // Separate users into two groups:
+ $specialized_users = array(); // Users with product assignments
+ $general_users = array(); // Users WITHOUT product assignments
+ 
+ foreach ($users as $user) {
+ $status = get_user_meta($user->ID, 'moderator_status', true);
+ // Check if user is in any of their assigned shifts
+ $shift_check = is_user_in_any_shift($user->ID);
+ 
+ if ($status === 'active' && $shift_check !== false) {
+ $assigned_products = get_user_meta($user->ID, 'moderator_assigned_products', true);
+ 
+ if (!empty($assigned_products)) {
+ $specialized_users[] = array(
+ 'user' => $user,
+ 'shift_info' => $shift_check
+ );
+ } else {
+ $general_users[] = array(
+ 'user' => $user,
+ 'shift_info' => $shift_check
+ );
+ }
+ }
+ }
+ 
+ // Sort both groups by sequence
+ usort($specialized_users, function($a, $b) {
+ $seq_a = get_user_meta($a['user']->ID, 'moderator_sequence', true);
+ $seq_b = get_user_meta($b['user']->ID, 'moderator_sequence', true);
+ return $seq_a - $seq_b;
+ });
+ 
+ usort($general_users, function($a, $b) {
+ $seq_a = get_user_meta($a['user']->ID, 'moderator_sequence', true);
+ $seq_b = get_user_meta($b['user']->ID, 'moderator_sequence', true);
+ return $seq_a - $seq_b;
+ });
+ 
+ // STEP 1: Try to find specialized users for these specific products
+ $eligible_specialized_users = array();
+ 
+ foreach ($specialized_users as $user_data) {
+ $user = $user_data['user'];
+ $assigned_products = get_user_meta($user->ID, 'moderator_assigned_products', true);
+ 
+ // Check if any product in this order matches user's assigned products
+ $common_products = array_intersect($product_ids, $assigned_products);
+ if (!empty($common_products)) {
+ $eligible_specialized_users[] = array(
+ 'user' => $user,
+ 'common_products' => $common_products,
+ 'match_count' => count($common_products),
+ 'shift_info' => $user_data['shift_info']
+ );
+ }
+ }
+ 
+ $assigned_user = null;
+ $assignment_type = '';
+ $next_sequence = 0;
+ $shift_info = null;
+ 
+ // If we found specialized users for these products
+ if (!empty($eligible_specialized_users)) {
+ $assignment_type = 'product_specific';
+ 
+ // Sort by match count (users with more matching products get priority)
+ usort($eligible_specialized_users, function($a, $b) {
+ return $b['match_count'] - $a['match_count'];
+ });
+ 
+ // Get product-specific sequence key
+ $product_specific_sequence_key = 'last_assigned_moderator_sequence_products_' . implode('_', $product_ids);
+ $last_assigned_sequence = get_option($product_specific_sequence_key, 0);
+ 
+ // Find the next user based on SEQUENCE from eligible specialized users
+ $next_sequence = $last_assigned_sequence + 1;
+ 
+ // If next sequence exceeds max sequence, reset to 1
+ $max_sequence = 0;
+ foreach ($eligible_specialized_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence > $max_sequence) {
+ $max_sequence = $current_sequence;
+ }
+ }
+ 
+ if ($next_sequence > $max_sequence) {
+ $next_sequence = 1;
+ }
+ 
+ // Find user with the next sequence
+ foreach ($eligible_specialized_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence == $next_sequence) {
+ $assigned_user = $user_data['user'];
+ $shift_info = $user_data['shift_info'];
+ break;
+ }
+ }
+ 
+ // If no user found with exact sequence, get the next available one
+ if (!$assigned_user) {
+ // Sort eligible users by sequence
+ usort($eligible_specialized_users, function($a, $b) {
+ $seq_a = get_user_meta($a['user']->ID, 'moderator_sequence', true);
+ $seq_b = get_user_meta($b['user']->ID, 'moderator_sequence', true);
+ return $seq_a - $seq_b;
+ });
+ 
+ // Find the first user with sequence >= next_sequence
+ foreach ($eligible_specialized_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence >= $next_sequence) {
+ $assigned_user = $user_data['user'];
+ $shift_info = $user_data['shift_info'];
+ $next_sequence = $current_sequence;
+ break;
+ }
+ }
+ 
+ // If still no user, get the first one
+ if (!$assigned_user) {
+ $assigned_user = $eligible_specialized_users[0]['user'];
+ $shift_info = $eligible_specialized_users[0]['shift_info'];
+ $next_sequence = get_user_meta($assigned_user->ID, 'moderator_sequence', true);
+ }
+ }
+ 
+ // Update the product-specific sequence
+ update_option($product_specific_sequence_key, $next_sequence);
+ 
+ } 
+ // STEP 2: If no specialized users found, use general users (no product assignments)
+ elseif (!empty($general_users)) {
+ $assignment_type = 'general';
+ 
+ // Determine which sequence to use based on order status
+ if ($order_status === 'partial') {
+ // Use partial-specific sequence
+ $sequence_option_key = 'last_assigned_partial_moderator_sequence';
+ $sequence_type = 'partial';
+ } elseif ($order_status === 'processing') {
+ // Use processing-specific sequence
+ $sequence_option_key = 'last_assigned_processing_moderator_sequence';
+ $sequence_type = 'processing';
+ } else {
+ // Use general sequence for other statuses
+ $sequence_option_key = 'last_assigned_general_moderator_sequence';
+ $sequence_type = 'general';
+ }
+ 
+ // Get the appropriate sequence
+ $last_assigned_sequence = get_option($sequence_option_key, 0);
+ $next_sequence = $last_assigned_sequence + 1;
+ 
+ // If next sequence exceeds max sequence, reset to 1
+ $max_sequence = 0;
+ foreach ($general_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence > $max_sequence) {
+ $max_sequence = $current_sequence;
+ }
+ }
+ 
+ if ($next_sequence > $max_sequence) {
+ $next_sequence = 1;
+ }
+ 
+ // Find user with the next sequence
+ foreach ($general_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence == $next_sequence) {
+ $assigned_user = $user_data['user'];
+ $shift_info = $user_data['shift_info'];
+ break;
+ }
+ }
+ 
+ // If no user found with exact sequence, get the next available one
+ if (!$assigned_user) {
+ // Find the first user with sequence >= next_sequence
+ foreach ($general_users as $user_data) {
+ $current_sequence = get_user_meta($user_data['user']->ID, 'moderator_sequence', true);
+ if ($current_sequence >= $next_sequence) {
+ $assigned_user = $user_data['user'];
+ $shift_info = $user_data['shift_info'];
+ $next_sequence = $current_sequence;
+ break;
+ }
+ }
+ 
+ // If still no user, get the first one
+ if (!$assigned_user) {
+ $assigned_user = $general_users[0]['user'];
+ $shift_info = $general_users[0]['shift_info'];
+ $next_sequence = get_user_meta($assigned_user->ID, 'moderator_sequence', true);
+ }
+ }
+ 
+ // Update the appropriate sequence based on order status
+ update_option($sequence_option_key, $next_sequence);
+ 
+ // Store sequence type in meta for tracking
+ update_post_meta($order_id, '_sequence_type', $sequence_type);
+ }
+ 
+ // If no users found at all
+ if (!$assigned_user) {
+ $order->add_order_note('No active users available for assignment (check shift timings).');
+ return;
+ }
+ 
+ // Update order with user information
+ update_post_meta($order_id, '_assigned_moderator_id', $assigned_user->ID);
+ update_post_meta($order_id, '_assigned_moderator_name', $assigned_user->display_name);
+ update_post_meta($order_id, '_assigned_moderator_sequence', $next_sequence);
+ update_post_meta($order_id, '_assignment_type', $assignment_type);
+ 
+ // Add shift info to order meta
+ if ($shift_info && isset($shift_info['shift_name'])) {
+ update_post_meta($order_id, '_assigned_shift_name', $shift_info['shift_name']);
+ update_post_meta($order_id, '_assigned_shift_key', $shift_info['shift_key']);
+ }
+ 
+ // Add order note with detailed information
+ $assigned_products = get_user_meta($assigned_user->ID, 'moderator_assigned_products', true);
+ $product_note = '';
+ 
+ if (!empty($assigned_products) && $assignment_type === 'product_specific') {
+ $product_names = array();
+ foreach ($assigned_products as $product_id) {
+ $product = wc_get_product($product_id);
+ if ($product) {
+ $product_names[] = $product->get_name();
+ }
+ }
+ $product_note = ' (Specialized in: ' . implode(', ', $product_names) . ')';
+ }
+ 
+ $order_products_info = array();
+ foreach ($product_ids as $product_id) {
+ $product = wc_get_product($product_id);
+ if ($product) {
+ $order_products_info[] = $product->get_name();
+ }
+ }
+ 
+ // Add shift info to note
+ $shift_note = '';
+ if ($shift_info && isset($shift_info['shift_name'])) {
+ $shift_note = ' [' . $shift_info['shift_name'] . ']';
+ }
+ 
+ // Add delay notice if assignment was delayed
+ $delay_note = $delayed ? ' - Assigned after 5-minute delay for partial order status' : '';
+ 
+ // Add sequence type info for partial/processing orders
+ $sequence_type_note = '';
+ if (isset($sequence_type) && in_array($sequence_type, ['partial', 'processing'])) {
+ $sequence_type_note = ' [' . ucfirst($sequence_type) . ' Sequence]';
+ }
+ 
+ if ($assignment_type === 'product_specific') {
+ $order->add_order_note(sprintf(
+ 'Order automatically assigned to User %d: %s%s%s - Product-specific assignment for: %s%s%s',
+ $next_sequence,
+ $assigned_user->display_name,
+ $product_note,
+ $shift_note,
+ implode(', ', $order_products_info),
+ $sequence_type_note,
+ $delay_note
+ ));
+ } else {
+ $order->add_order_note(sprintf(
+ 'Order automatically assigned to User %d: %s%s - %s assignment for: %s%s%s',
+ $next_sequence,
+ $assigned_user->display_name,
+ $shift_note,
+ $order_status === 'partial' ? 'Partial' : ($order_status === 'processing' ? 'Processing' : 'General'),
+ implode(', ', $order_products_info),
+ $sequence_type_note,
+ $delay_note
+ ));
+ }
+ 
+ // Optional: Send email to user
+ send_moderator_notification($assigned_user, $order, $shift_info, $delayed);
+}
+
+// Updated notification function with shift info
+function send_moderator_notification($moderator, $order, $shift_info = null, $delayed = false) {
+ $to = $moderator->user_email;
+ $subject = 'New Order Assigned to You - Moderator ' . get_user_meta($moderator->ID, 'moderator_sequence', true);
+ 
+ $delay_info = $delayed ? "\n\n Note: This assignment was delayed for 5 minutes due to partial order status." : "";
+ 
+ // Get shift info
+ $shift_info_text = '';
+ if ($shift_info && isset($shift_info['shift_name'])) {
+ $shift_info_text = "\nShift: " . $shift_info['shift_name'];
+ }
+ 
+ $message = "
+ Hello " . $moderator->display_name . ",
+
+ A new order has been assigned to you!
+ " . $shift_info_text . "
+
+ Order Details:
+ Order #: " . $order->get_id() . "
+ Customer: " . $order->get_formatted_billing_full_name() . "
+ Total: " . $order->get_formatted_order_total() . "
+Date: " . aoam_format_order_local_date($order, 'F j, Y g:i A') . "
+ 
+ " . $delay_info . "
+
+ Please process this order promptly.
+
+ Login to your dashboard to view details: " . admin_url('edit.php?post_type=shop_order') . "
+
+ Thank you!
+ ";
+
+ wp_mail($to, $subject, $message);
+ 
+ // Update last active timestamp
+ update_user_meta($moderator->ID, 'moderator_last_active', current_time('mysql'));
+}
+
+
+// Admin menu for separate pages
+add_action('admin_menu', 'moderator_sequence_settings_menu');
+
+function moderator_sequence_settings_menu() {
+ add_menu_page(
+ 'Order Management',
+ 'Order Management',
+ 'manage_options',
+ 'moderator-settings',
+ 'moderator_settings_main_page',
+ 'dashicons-sort',
+ 56
+ );
+ 
+ add_submenu_page(
+ 'moderator-settings',
+ 'Recent Assignments',
+ 'Recent Assignments',
+ 'manage_options',
+ 'moderator-recent-assignments',
+ 'moderator_recent_assignments_page'
+ );
+ 
+ add_submenu_page(
+ 'moderator-settings',
+ 'Moderator Sequence & Status',
+ 'Sequence & Status',
+ 'manage_options',
+ 'moderator-sequence-status',
+ 'moderator_sequence_status_page'
+ );
+ 
+ add_submenu_page(
+ 'moderator-settings',
+ 'Assign Products to Moderators',
+ 'Product Assignments',
+ 'manage_options',
+ 'moderator-product-assignments',
+ 'moderator_product_assignments_page'
+ );
+
+ add_submenu_page(
+ 'moderator-settings',
+ 'Plugin Settings',
+ 'Plugin Settings',
+ 'manage_options',
+ 'moderator-plugin-settings',
+ 'aoam_plugin_settings_page'
+ );
+ add_submenu_page(
+ 'moderator-settings',
+ 'Remote Order Import',
+ 'Remote Import',
+ 'manage_options',
+ 'moderator-remote-import',
+ 'aoam_remote_order_import_page'
+ );
+ add_submenu_page(
+ 'moderator-settings',
+ 'Reassign Orders',
+ 'Reassign',
+ 'manage_options',
+ 'moderator-reassign-orders',
+ 'moderator_reassign_orders_page'
+ );
+}
+
+function moderator_settings_main_page() {
+ // Get assigned roles dynamically
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Get users with assigned roles
+ $all_users = get_users(array(
+ 'role__in' => $assigned_roles,
+ 'number' => -1
+ ));
+ 
+ // Calculate stats based on all users with assigned roles
+ $total_users = count($all_users);
+ 
+ $active_users = array_filter($all_users, function($user) {
+ $status = get_user_meta($user->ID, 'moderator_status', true);
+ return $status !== 'inactive';
+ });
+ 
+ $users_with_products = array_filter($all_users, function($user) {
+ $products = get_user_meta($user->ID, 'moderator_assigned_products', true);
+ return !empty($products);
+ });
+ 
+ // Count users in shift
+ $users_in_shift = array_filter($all_users, function($user) {
+ $status = get_user_meta($user->ID, 'moderator_status', true);
+ if ($status !== 'active') return false;
+ return is_user_in_shift_time($user->ID);
+ });
+ 
+ // Get today's assignment stats
+ global $wpdb;
+ $today = date('Y-m-d');
+ $today_assignments = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(DISTINCT pm.post_id) 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND DATE(p.post_date) = %s
+ ", $today));
+ 
+ ?>
+ <div class="wrap">
+ <h1> User Management Dashboard</h1>
+ 
+ <div class="card" style="text-align: center; padding: 40px;">
+ <h2> User Management Dashboard</h2>
+ <p>Choose a section to manage your users and order assignments:</p>
+ 
+ <!-- Quick Stats with better design -->
+ <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px; margin-top: 30px; color: white;">
+ <h3 style="color: white; margin-top: 0;"> Live Statistics</h3>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 20px;">
+ <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.2); border-radius: 10px; backdrop-filter: blur(10px);">
+ <div style="margin-bottom: 5px;font-size: 32px; font-weight: bold; color: #fff;"><?php echo $total_users; ?></div>
+ <div style="font-size: 14px; opacity: 0.9;">Total Users</div>
+ </div>
+ <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.2); border-radius: 10px; backdrop-filter: blur(10px);">
+ <div style="margin-bottom: 5px;font-size: 32px; font-weight: bold; color: #4CAF50;"><?php echo count($active_users); ?></div>
+ <div style="font-size: 14px; opacity: 0.9;">Active Users</div>
+ </div>
+ <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.2); border-radius: 10px; backdrop-filter: blur(10px);">
+ <div style="margin-bottom: 5px;font-size: 32px; font-weight: bold; color: #FF9800;"><?php echo count($users_in_shift); ?></div>
+ <div style="font-size: 14px; opacity: 0.9;">In Shift Now</div>
+ </div>
+ <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.2); border-radius: 10px; backdrop-filter: blur(10px);">
+ <div style="margin-bottom: 5px;font-size: 32px; font-weight: bold; color: #2196F3;"><?php echo $today_assignments; ?></div>
+ <div style="font-size: 14px; opacity: 0.9;">Today's Assignments</div>
+ </div>
+ </div>
+ 
+ <!-- Progress bars for better visualization -->
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 25px;">
+ <div style="text-align: left;">
+ <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+ <span>Active Users</span>
+ <span><?php echo count($active_users); ?>/<?php echo $total_users; ?></span>
+ </div>
+ <div style="background: rgba(255,255,255,0.3); height: 8px; border-radius: 4px; overflow: hidden;">
+ <div style="background: #4CAF50; height: 100%; width: <?php echo $total_users > 0 ? (count($active_users) / $total_users * 100) : 0; ?>%;"></div>
+ </div>
+ </div>
+ <div style="text-align: left;">
+ <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+ <span>In Shift Now</span>
+ <span><?php echo count($users_in_shift); ?>/<?php echo count($active_users); ?></span>
+ </div>
+ <div style="background: rgba(255,255,255,0.3); height: 8px; border-radius: 4px; overflow: hidden;">
+ <div style="background: #FF9800; height: 100%; width: <?php echo count($active_users) > 0 ? (count($users_in_shift) / count($active_users) * 100) : 0; ?>%;"></div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Dashboard cards with better styling -->
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 25px; margin: 40px 0;">
+ 
+ <div class="card" style="text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+ <div style="font-size: 48px; margin-bottom: 25px;"></div>
+ <h3 style="color: white; margin-top: 8px; margin-bottom:10px;">Recent Assignments</h3>
+ <p style="opacity: 0.9;">View recent order assignments and history</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="button button-primary" style="background: white; color: #667eea; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 15px;">
+ View Assignments
+ </a>
+ </div>
+
+ <div class="card" style="text-align: center; padding: 30px; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+ <div style="font-size: 48px; margin-bottom: 25px;"></div>
+ <h3 style="color: white; margin-top: 8px; margin-bottom:10px;">Sequence & Status</h3>
+ <p style="opacity: 0.9;">Set user sequence, status and shift timings</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="button button-primary" style="background: white; color: #f5576c; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 15px;">
+ Manage Sequence & Status
+ </a>
+ </div>
+
+ <div class="card" style="text-align: center; padding: 30px; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+ <div style="font-size: 48px; margin-bottom: 25px;"></div>
+ <h3 style="color: white; margin-top: 8px; margin-bottom:10px;">Product Assignments</h3>
+ <p style="opacity: 0.9;">Assign specific products to users</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="button button-primary" style="background: white; color: #4facfe; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 15px;">
+ Manage Product Assignments
+ </a>
+ </div>
+
+ <div class="card" style="text-align: center; padding: 30px; background: linear-gradient(135deg, #b34ffe 0%, #d7fe00 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+ <div style="font-size: 48px; margin-bottom: 25px;"></div>
+ <h3 style="color: white; margin-top: 8px; margin-bottom:10px;">Reassign</h3>
+ <p style="opacity: 0.9;">Inactive user order reassign</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="button button-primary" style="background: white; color: #4facfe; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 15px;">
+ Reassign
+ </a>
+ </div>
+
+ <div class="card" style="text-align: center; padding: 30px; background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: white; border: none; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+ <div style="font-size: 48px; margin-bottom: 25px;"></div>
+ <h3 style="color: white; margin-top: 8px; margin-bottom:10px;">Plugin Settings</h3>
+ <p style="opacity: 0.9;">Select Multiple Role Assign</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="button button-primary" style="background: white; color: #43e97b; border: none; padding: 12px 24px; border-radius: 6px; font-weight: bold; margin-top: 15px;">
+ Manage Role
+ </a>
+ </div>
+ </div>
+ </div>
+ </div>
+ 
+ <style>
+ .card { 
+ margin: 20px 0; 
+ padding: 20px; 
+ background: #fff; 
+ border: 1px solid #ccd0d4; 
+ border-radius: 8px;
+ box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+ max-width: 100%;
+ }
+ 
+ /* Hover effects for dashboard cards */
+ .card:hover {
+ transform: translateY(-2px);
+ box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+ transition: all 0.3s ease;
+ }
+ 
+ /* Button hover effects */
+ .button.button-primary:hover {
+ transform: translateY(-1px);
+ box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+ }
+ </style>
+ <?php
+}
+
+ // ====================================================
+ // MODIFIED SEQUENCE & STATUS PAGE WITH SHIFT ASSIGNMENT
+ // ====================================================
+
+function moderator_sequence_status_page() {
+ // Get assigned roles dynamically
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Handle form submissions for this page only
+ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ 
+ // Handle status update
+ if (isset($_POST['update_status']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['moderator_status'])) {
+ foreach ($_POST['moderator_status'] as $user_id => $status) {
+ $user_id = intval($user_id);
+ $status = sanitize_text_field($status);
+ update_user_meta($user_id, 'moderator_status', $status);
+ 
+ if ($status === 'active') {
+ update_user_meta($user_id, 'moderator_last_active', current_time('mysql'));
+ }
+ }
+ echo '<div class="notice notice-success"><p>User status updated successfully!</p></div>';
+ }
+ }
+ 
+ // Handle sequence update
+ if (isset($_POST['update_sequence']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['moderator_sequence'])) {
+ foreach ($_POST['moderator_sequence'] as $user_id => $sequence) {
+ $user_id = intval($user_id);
+ $sequence = intval($sequence);
+ update_user_meta($user_id, 'moderator_sequence', $sequence);
+ update_user_meta($user_id, 'moderator_last_active', current_time('mysql'));
+ }
+ echo '<div class="notice notice-success"><p>User sequence updated successfully!</p></div>';
+ }
+ }
+ 
+ // Handle shift assignment update
+ if (isset($_POST['update_shifts']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['moderator_shifts'])) {
+ foreach ($_POST['moderator_shifts'] as $user_id => $shifts) {
+ $user_id = intval($user_id);
+ $shifts = is_array($shifts) ? array_map('sanitize_text_field', $shifts) : array();
+ update_user_meta($user_id, 'moderator_assigned_shifts', $shifts);
+ }
+ echo '<div class="notice notice-success"><p>Shift assignments updated successfully!</p></div>';
+ }
+ }
+ 
+ // Handle shift removal for specific user
+ if (isset($_POST['clear_user_shifts']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ $user_id = intval($_POST['user_id']);
+ if ($user_id) {
+ delete_user_meta($user_id, 'moderator_assigned_shifts');
+ echo '<div class="notice notice-success"><p>Shift assignments cleared for user!</p></div>';
+ }
+ }
+ 
+ // Handle bulk actions
+ if (isset($_POST['bulk_update']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ $bulk_action = $_POST['bulk_action'] ?? '';
+ 
+ // Get users with assigned roles
+ $users = get_users(array('role__in' => $assigned_roles));
+ 
+ if ($bulk_action === 'activate_all') {
+ foreach ($users as $user) {
+ update_user_meta($user->ID, 'moderator_status', 'active');
+ update_user_meta($user->ID, 'moderator_last_active', current_time('mysql'));
+ }
+ echo '<div class="notice notice-success"><p>All users activated!</p></div>';
+ } elseif ($bulk_action === 'deactivate_all') {
+ foreach ($users as $user) {
+ update_user_meta($user->ID, 'moderator_status', 'inactive');
+ }
+ echo '<div class="notice notice-success"><p>All users deactivated!</p></div>';
+ } elseif ($bulk_action === 'reset_all_sequences') {
+ global $wpdb;
+ $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'last_assigned_moderator_sequence_products_%'");
+ update_option('last_assigned_moderator_sequence', 0);
+ echo '<div class="notice notice-success"><p>All assignment sequences reset!</p></div>';
+ } elseif ($bulk_action === 'clear_all_shifts') {
+ foreach ($users as $user) {
+ delete_user_meta($user->ID, 'moderator_assigned_shifts');
+ }
+ echo '<div class="notice notice-success"><p>All shift assignments cleared!</p></div>';
+ }
+ }
+ }
+ 
+ // Get filter parameters
+ $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+ $status_filter = isset($_GET['status_filter']) ? sanitize_text_field($_GET['status_filter']) : 'all';
+ $sequence_filter = isset($_GET['sequence_filter']) ? sanitize_text_field($_GET['sequence_filter']) : 'all';
+ $shift_filter = isset($_GET['shift_filter']) ? sanitize_text_field($_GET['shift_filter']) : 'all';
+ 
+ // Get shift settings
+ $shift_settings = aoam_get_shift_settings();
+ 
+ // Base query for users with assigned roles
+ $user_args = array(
+ 'role__in' => $assigned_roles,
+ 'orderby' => 'ID',
+ 'order' => 'ASC',
+ 'number' => -1
+ );
+ 
+ // Apply search filter
+ if (!empty($search_term)) {
+ $user_args['search'] = '*' . $search_term . '*';
+ $user_args['search_columns'] = array('user_login', 'user_nicename', 'user_email', 'display_name');
+ }
+ 
+ $all_users = get_users($user_args);
+ 
+ // Apply status filter
+ $users = array();
+ foreach ($all_users as $user) {
+ $current_status = get_user_meta($user->ID, 'moderator_status', true) ?: 'active';
+ $assigned_shifts = get_user_meta($user->ID, 'moderator_assigned_shifts', true);
+ $in_shift = is_user_in_any_shift($user->ID);
+ 
+ // Apply status filter
+ $status_match = ($status_filter === 'all' || $current_status === $status_filter);
+ 
+ // Apply shift filter
+ $shift_match = false;
+ if ($shift_filter === 'all') {
+ $shift_match = true;
+ } elseif ($shift_filter === 'with_shifts' && !empty($assigned_shifts)) {
+ $shift_match = true;
+ } elseif ($shift_filter === 'without_shifts' && empty($assigned_shifts)) {
+ $shift_match = true;
+ } elseif ($shift_filter === 'in_shift' && $in_shift !== false) {
+ $shift_match = true;
+ } elseif ($shift_filter === 'out_shift' && $current_status === 'active' && !empty($assigned_shifts) && $in_shift === false) {
+ $shift_match = true;
+ } elseif (strpos($shift_filter, 'shift_') === 0) {
+ // Specific shift filter
+ if (!empty($assigned_shifts) && in_array($shift_filter, $assigned_shifts)) {
+ $shift_match = true;
+ }
+ }
+ 
+ if ($status_match && $shift_match) {
+ // Apply sequence filter if set
+ if ($sequence_filter === 'all') {
+ $users[] = $user;
+ } else {
+ $current_sequence = get_user_meta($user->ID, 'moderator_sequence', true);
+ if ($sequence_filter === 'with_sequence' && $current_sequence) {
+ $users[] = $user;
+ } elseif ($sequence_filter === 'without_sequence' && !$current_sequence) {
+ $users[] = $user;
+ }
+ }
+ }
+ }
+ 
+ $active_users = array_filter($users, function($user) {
+ $status = get_user_meta($user->ID, 'moderator_status', true);
+ return $status !== 'inactive';
+ });
+ 
+ $in_shift_users = array_filter($active_users, function($user) {
+ return is_user_in_any_shift($user->ID) !== false;
+ });
+ ?>
+
+ <div class="wrap">
+ 
+ <div class="card">
+ <h2> Sequence Statistics</h2>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+ <div style="text-align: center; padding: 15px; background: #fff8e1; border-radius: 6px;">
+ <div style="font-size: 20px; font-weight: bold; color: #ffb900;">
+ <?php echo get_option('last_assigned_partial_moderator_sequence', 0); ?>
+ </div>
+ <div>Partial Sequence</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #e5f7e5; border-radius: 6px;">
+ <div style="font-size: 20px; font-weight: bold; color: #46b450;">
+ <?php echo get_option('last_assigned_processing_moderator_sequence', 0); ?>
+ </div>
+ <div>Processing Sequence</div>
+ </div>
+ </div>
+ 
+ <!-- Reset Sequences Form -->
+ <form method="post" style="margin-top: 20px;">
+ <?php wp_nonce_field('reset_sequences', 'reset_sequences_nonce'); ?>
+ <input type="submit" name="reset_all_sequences" class="button button-secondary" 
+ value=" Reset All Sequences" 
+ onclick="return confirm('Are you sure you want to reset ALL assignment sequences? This will restart counting from User 1.')">
+ <small style="color: #666; margin-left: 10px;">This will reset all assignment sequences to start from User 1</small>
+ </form>
+ </div>
+ 
+ <h1> User Sequence, Status & Shift Assignment</h1>
+ 
+ <!-- Navigation Tabs -->
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo admin_url('admin.php?page=moderator-settings'); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="nav-tab">Recent Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab nav-tab-active">Sequence & Status</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ </div>
+
+ <!-- ... [existing cards and stats code remains the same] ... -->
+
+ <?php if (empty($users)): ?>
+ <div class="card">
+ <!-- ... [no users found message] ... -->
+ </div>
+ <?php else: ?>
+ 
+ <form method="post" id="moderator-sequence-form">
+ <?php wp_nonce_field('moderator_settings', 'moderator_nonce'); ?>
+ 
+ <table class="wp-list-table widefat fixed striped" id="moderator-sequence-table">
+ <thead>
+ <tr>
+ <th style="width: 80px;">Sequence</th>
+ <th style="width: 150px;">User Name</th>
+ <th style="width: 100px;">Status</th>
+ <th style="width: 250px;">Assigned Shifts</th>
+ <th style="width: 200px;">Current Shift Status</th>
+ <th style="width: 100px;">Assigned Products</th>
+ <th style="width: 100px;">Assigned Orders</th>
+ <th style="width: 120px;">Last Active</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php
+ $sequence = 1;
+ foreach ($users as $user) {
+ $current_sequence = get_user_meta($user->ID, 'moderator_sequence', true) ?: $sequence;
+ $current_status = get_user_meta($user->ID, 'moderator_status', true);
+ if (empty($current_status)) {
+ $current_status = 'active';
+ update_user_meta($user->ID, 'moderator_status', 'active');
+ }
+ 
+ $assigned_shifts = get_user_meta($user->ID, 'moderator_assigned_shifts', true);
+ $user_shifts = get_user_assigned_shifts($user->ID);
+ $shift_check = is_user_in_any_shift($user->ID);
+ $last_active = get_user_meta($user->ID, 'moderator_last_active', true);
+ $assigned_products = get_user_meta($user->ID, 'moderator_assigned_products', true) ?: array();
+
+ global $wpdb;
+ $order_ids = $wpdb->get_col($wpdb->prepare("
+ SELECT post_id 
+ FROM {$wpdb->postmeta} 
+ WHERE meta_key = '_assigned_moderator_id' 
+ AND meta_value = %d
+ ", $user->ID));
+ 
+ $orders = array();
+ foreach ($order_ids as $order_id) {
+ $order = wc_get_order($order_id);
+ if ($order) {
+ $orders[] = $order;
+ }
+ }
+ 
+ // Get all user's assigned shifts information
+ $assigned_shift_names = array();
+ $assigned_shift_keys = array();
+ 
+ if (!empty($user_shifts)) {
+ foreach ($user_shifts as $shift_key => $shift_data) {
+ $assigned_shift_names[] = $shift_data['name'];
+ $assigned_shift_keys[] = $shift_key;
+ }
+ }
+ 
+ // Check which specific shifts user is currently in
+ $current_in_shifts = array();
+ $current_not_in_shifts = array();
+ 
+ if ($current_status === 'active') {
+ if (!empty($assigned_shifts)) {
+ $shift_settings = aoam_get_shift_settings();
+ $current_time = current_time('H:i');
+ $current_hour = (int)date('H', strtotime($current_time));
+ $current_minute = (int)date('i', strtotime($current_time));
+ $current_decimal = $current_hour + ($current_minute / 60);
+ 
+ foreach ($assigned_shifts as $shift_key) {
+ if (isset($shift_settings[$shift_key])) {
+ $shift = $shift_settings[$shift_key];
+ 
+ // Parse start time
+ $start_time = $shift['start'];
+ list($start_hour, $start_minute) = explode(':', $start_time);
+ $start_hour = (int)$start_hour;
+ $start_minute = (int)$start_minute;
+ $start_decimal = $start_hour + ($start_minute / 60);
+ 
+ // Parse end time
+ $end_time = $shift['end'];
+ list($end_hour, $end_minute) = explode(':', $end_time);
+ $end_hour = (int)$end_hour;
+ $end_minute = (int)$end_minute;
+ $end_decimal = $end_hour + ($end_minute / 60);
+ 
+ // Check if in this specific shift
+ $in_this_shift = false;
+ if ($end_decimal < $start_decimal) {
+ // Overnight shift
+ $in_this_shift = ($current_decimal >= $start_decimal || $current_decimal <= $end_decimal);
+ } else {
+ // Normal shift
+ $in_this_shift = ($current_decimal >= $start_decimal && $current_decimal <= $end_decimal);
+ }
+ 
+ if ($in_this_shift) {
+ $current_in_shifts[] = $shift['name'];
+ } else {
+ $current_not_in_shifts[] = $shift['name'];
+ }
+ }
+ }
+ }
+ }
+ 
+ ?>
+ <tr class="user-<?php echo $current_status; ?>" data-user-id="<?php echo $user->ID; ?>">
+ <td>
+ <input style="width:60px;" type="text" name="moderator_sequence[<?php echo $user->ID; ?>]" 
+ value="<?php echo $current_sequence; ?>" class="sequence-input">
+ </td>
+ <td>
+ <strong><?php echo esc_html($user->display_name); ?></strong>
+ <div class="sequence-number">#<?php echo $current_sequence; ?></div>
+ <?php if ($current_status == 'inactive'): ?>
+ <span class="dashicons dashicons-hidden" style="color:#ff0000; margin-left:5px;" title="Inactive"> </span>
+ <?php endif; ?>
+ </td>
+ <td>
+ <select name="moderator_status[<?php echo $user->ID; ?>]" class="moderator-status">
+ <option value="active" <?php selected($current_status, 'active'); ?>>Active</option>
+ <option value="inactive" <?php selected($current_status, 'inactive'); ?>>Inactive</option>
+ </select>
+ </td>
+ <td>
+ <div class="shift-assignment">
+ <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px;">
+ <?php foreach ($shift_settings as $shift_key => $shift): ?>
+ <label style="display: flex; align-items: center; gap: 3px; padding: 4px 8px; background: <?php echo $shift['color'] . '20'; ?>; border-radius: 4px; border: 1px solid <?php echo $shift['color'] . '40'; ?>;">
+ <input type="checkbox" 
+ name="moderator_shifts[<?php echo $user->ID; ?>][]" 
+ value="<?php echo $shift_key; ?>"
+ <?php checked(is_array($assigned_shifts) && in_array($shift_key, $assigned_shifts)); ?>>
+ <span style="font-size: 11px; font-weight: bold; color: <?php echo $shift['color']; ?>;">
+ <?php echo $shift['name']; ?>
+ </span>
+ </label>
+ <?php endforeach; ?>
+ </div>
+ <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 5px;">
+ <small style="color: #666; font-size: 11px;">
+ <?php if (!empty($assigned_shift_names)): ?>
+ Assigned: 
+ <?php echo implode(', ', $assigned_shift_names); ?>
+ <?php else: ?>
+ No shifts assigned
+ <?php endif; ?>
+ </small>
+ <button type="button" class="button button-small clear-shifts-btn" 
+ data-user-id="<?php echo $user->ID; ?>" 
+ data-user-name="<?php echo esc_attr($user->display_name); ?>"
+ style="font-size: 10px; padding: 2px 6px;">
+ Clear All
+ </button>
+ </div>
+ </div>
+ </td>
+ <td>
+ <div class="shift-status">
+ <?php 
+ if ($current_status === 'active') {
+ if (!empty($assigned_shifts)) {
+ // User has assigned shifts
+ if (!empty($current_in_shifts)) {
+ // Currently in one or more shifts
+ ?>
+ <span class="shift-status-text" style="color: #46b450; font-weight: bold;">
+ In Shift
+ </span>
+ <br>
+ <small style="color: #46b450;">
+ Will receive orders (<?php echo implode(', ', $current_in_shifts); ?>)
+ </small>
+ <?php
+ } else {
+ // Not currently in any assigned shift
+ ?>
+ <span class="shift-status-text" style="color: #666; font-weight: bold;">
+ Currently Out of Shift
+ </span>
+ <br>
+ <small style="color: #666;">
+ Assigned shifts: <?php echo implode(', ', $assigned_shift_names); ?>
+ <br>Will receive orders when in shift
+ <br>Current time: <?php echo current_time('H:i'); ?>
+ </small>
+ <?php
+ }
+ } else {
+ // No shifts assigned - always active
+ ?>
+ <span class="shift-status-text" style="color: #0073aa; font-weight: bold;">
+ Always Active
+ </span>
+ <br>
+ <small style="color: #666;">
+ No shift restrictions<br>
+ Will receive orders anytime
+ </small>
+ <?php
+ }
+ } else {
+ // User is inactive
+ ?>
+ <span class="shift-status-text" style="color: #cc1818; font-weight: bold;">
+ Inactive User
+ </span>
+ <br>
+ <small style="color: #666;">
+ Won't receive orders<br>
+ Change status to "Active" to receive orders
+ </small>
+ <?php
+ }
+ ?>
+ </div>
+ </td>
+ <td>
+ <?php 
+ if (empty($assigned_products)) {
+ echo '<div class="no-products-assigned">';
+ echo '<span class="dashicons dashicons-warning" style="color:#cc1818;"></span>';
+ echo '<span style="color:#cc1818; font-weight:bold;">No Products</span>';
+ echo '<br><small style="color:#666;">Will receive general orders</small>';
+ echo '</div>';
+ } else {
+ echo '<div class="products-assigned">';
+ echo '<span class="dashicons dashicons-yes-alt" style="color:#46b450;"></span>';
+ echo '<span style="color:#46b450; font-weight:bold;">' . count($assigned_products) . ' Products</span>';
+ 
+ echo '<div class="product-list">';
+ $display_count = 0;
+ foreach ($assigned_products as $product_id) {
+ if ($display_count >= 2) break;
+ $product = wc_get_product($product_id);
+ if ($product) {
+ echo '<div class="product-item">';
+ echo '<span class="product-name">' . esc_html($product->get_name()) . '</span>';
+ echo '</div>';
+ $display_count++;
+ }
+ }
+ 
+ if (count($assigned_products) > 2) {
+ echo '<div class="more-products">';
+ echo '+ ' . (count($assigned_products) - 2) . ' more';
+ echo '</div>';
+ }
+ echo '</div>';
+ echo '</div>';
+ }
+ ?>
+ </td>
+ <td>
+ <div class="order-count">
+ <strong><?php echo count($orders); ?></strong>
+ <br>
+ <small>orders</small>
+ </div>
+ </td>
+ <td>
+ <div class="last-active">
+ <?php 
+ if ($last_active) {
+ echo '<span class="date">' . date('M j, Y', strtotime($last_active)) . '</span>';
+ echo '<br><small class="time">' . date('g:i A', strtotime($last_active)) . '</small>';
+ } else {
+ echo '<span style="color:#666;">Never</span>';
+ }
+ ?>
+ </div>
+ </td>
+ </tr>
+ <?php
+ $sequence++;
+ }
+ ?>
+ </tbody>
+ </table>
+ 
+ <p style="margin-top: 15px;">
+ <input type="submit" name="update_sequence" class="button button-primary" value="Update Sequence">
+ <input type="submit" name="update_status" class="button button-secondary" value="Update Status Only">
+ <input type="submit" name="update_shifts" class="button button-secondary" value="Update Shifts Only">
+ </p>
+ </form>
+ <?php endif; ?>
+ </div>
+
+ <!-- Quick Actions -->
+ <div class="card">
+ <h2>Quick Actions</h2>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+ <div>
+ <h4 style="margin-top: 0;">Bulk Actions</h4>
+ <form method="post" style="display: flex; gap: 10px; align-items: center;">
+ <?php wp_nonce_field('moderator_settings', 'moderator_nonce'); ?>
+ <select name="bulk_action" id="bulk_action" style="flex: 1;">
+ <option value="">Select Action</option>
+ <option value="activate_all">Activate All Users</option>
+ <option value="deactivate_all">Deactivate All Users</option>
+ <option value="clear_all_shifts">Clear All Shift Assignments</option>
+ <option value="reset_all_sequences">Reset All Assignment Sequences</option>
+ </select>
+ <input type="submit" name="bulk_update" class="button" value="Apply" onclick="return confirm('Are you sure?')">
+ </form>
+ </div>
+ 
+ <div>
+ <h4 style="margin-top: 0;">Quick Filters</h4>
+ <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+ <a href="?page=moderator-sequence-status&shift_filter=in_shift" 
+ class="button button-small <?php echo $shift_filter === 'in_shift' ? 'button-primary' : 'button-secondary'; ?>">
+ In Shift Now
+ </a>
+ <a href="?page=moderator-sequence-status&shift_filter=out_shift" 
+ class="button button-small <?php echo $shift_filter === 'out_shift' ? 'button-primary' : 'button-secondary'; ?>">
+ Currently Out of Shift
+ </a>
+ <a href="?page=moderator-sequence-status&shift_filter=without_shifts" 
+ class="button button-small <?php echo $shift_filter === 'without_shifts' ? 'button-primary' : 'button-secondary'; ?>">
+ No Shifts (Always Active)
+ </a>
+ <a href="?page=moderator-sequence-status&status_filter=inactive" 
+ class="button button-small <?php echo $status_filter === 'inactive' ? 'button-primary' : 'button-secondary'; ?>">
+ Inactive Users
+ </a>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ <div class="clear"></div>
+ <style>
+ .card { margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4;max-width:100%; }
+ .sequence-number { 
+ display: inline-block; 
+ width: 30px; 
+ height: 30px; 
+ background: #0073aa; 
+ color: white; 
+ text-align: center; 
+ line-height: 30px; 
+ border-radius: 50%; 
+ font-weight: bold;
+ margin-top: 5px;
+ }
+ #wpfooter {
+ position: static !important;
+ }
+ .user-inactive { 
+ background-color: #fff8f8; 
+ opacity: 0.7;
+ }
+ .no-products-assigned {
+ padding: 8px;
+ background: #fff5f5;
+ border: 1px solid #ffd6d6;
+ border-radius: 4px;
+ text-align: center;
+ }
+ .products-assigned {
+ padding: 8px;
+ background: #f8fff8;
+ border: 1px solid #d6ffd6;
+ border-radius: 4px;
+ }
+ .product-list {
+ margin-top: 8px;
+ max-height: 80px;
+ overflow-y: auto;
+ padding: 5px;
+ background: white;
+ border-radius: 3px;
+ border: 1px solid #f0f0f0;
+ }
+ .product-item {
+ padding: 3px 5px;
+ margin: 2px 0;
+ background: #f9f9f9;
+ border-radius: 3px;
+ border-left: 3px solid #0073aa;
+ font-size: 11px;
+ line-height: 1.3;
+ }
+ .more-products {
+ padding: 5px;
+ text-align: center;
+ background: #f0f6fc;
+ color: #0073aa;
+ font-size: 10px;
+ font-weight: bold;
+ border-radius: 3px;
+ margin-top: 5px;
+ }
+ .order-count {
+ text-align: center;
+ padding: 5px;
+ }
+ .order-count strong {
+ font-size: 18px;
+ color: #0073aa;
+ display: block;
+ }
+ .last-active {
+ text-align: center;
+ padding: 5px;
+ }
+ .nav-tab-wrapper { margin: 20px 0; }
+ .nav-tab { 
+ text-decoration: none; 
+ padding: 10px 15px; 
+ margin: 0 5px 0 0; 
+ border: 1px solid #ccd0d4;
+ border-bottom: none;
+ background: #f0f0f0;
+ }
+ .nav-tab-active { 
+ background: #0073aa; 
+ color: white; 
+ border-bottom: 1px solid #0073aa;
+ }
+ .filter-group {
+ margin-bottom: 0;
+ }
+ .shift-assignment label {
+ cursor: pointer;
+ transition: all 0.3s ease;
+ }
+ .shift-assignment label:hover {
+ transform: translateY(-2px);
+ box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+ }
+ .shift-assignment input[type="checkbox"]:checked + span {
+ font-weight: bold;
+ }
+ .shift-status {
+ padding: 8px;
+ border-radius: 4px;
+ background: #f8f9fa;
+ border: 1px solid #e0e0e0;
+ min-height: 60px;
+ text-align: center;
+ }
+ .clear-shifts-btn {
+ background: #ff6b6b;
+ color: white;
+ border: none;
+ cursor: pointer;
+ }
+ .clear-shifts-btn:hover {
+ background: #ff5252;
+ }
+ </style>
+ 
+ <script>
+ jQuery(document).ready(function($) {
+ // Make table sortable
+ $('#moderator-sequence-table tbody').sortable({
+ update: function(event, ui) {
+ $('#moderator-sequence-table tbody tr').each(function(index) {
+ var sequence = index + 1;
+ $(this).find('.sequence-number').text('#' + sequence);
+ $(this).find('.sequence-input').val(sequence);
+ });
+ }
+ });
+ 
+ // Update row appearance when status changes
+ $('.moderator-status').change(function() {
+ var row = $(this).closest('tr');
+ if ($(this).val() === 'inactive') {
+ row.addClass('user-inactive');
+ } else {
+ row.removeClass('user-inactive');
+ }
+ });
+ 
+ // Initialize row colors based on current status
+ $('.moderator-status').each(function() {
+ var row = $(this).closest('tr');
+ if ($(this).val() === 'inactive') {
+ row.addClass('user-inactive');
+ }
+ });
+ 
+ // Clear shifts button functionality
+ $('.clear-shifts-btn').click(function(e) {
+ e.preventDefault();
+ 
+ var userId = $(this).data('user-id');
+ var userName = $(this).data('user-name');
+ var $button = $(this);
+ var $row = $button.closest('tr');
+ 
+ if (confirm('Are you sure you want to remove all shift assignments for ' + userName + '?\n\nThis will make the user "Always Active" and able to receive orders anytime.')) {
+ // Uncheck all checkboxes
+ $row.find('input[type="checkbox"]').prop('checked', false);
+ 
+ // Show loading state
+ $button.text('Clearing...').prop('disabled', true);
+ 
+ // Submit the form to save changes
+ setTimeout(function() {
+ $row.find('input[name^="moderator_shifts"]').val([]);
+ $('#moderator-sequence-form').append('<input type="hidden" name="clear_user_shifts" value="1">');
+ $('#moderator-sequence-form').append('<input type="hidden" name="user_id" value="' + userId + '">');
+ $('input[name="update_shifts"]').click();
+ }, 500);
+ }
+ });
+ 
+ // Focus on search field when page loads if there's a search term
+ <?php if (!empty($search_term)): ?>
+ $('#search').focus();
+ <?php endif; ?>
+ });
+ </script>
+ <?php
+}
+
+
+
+// The remaining functions (moderator_product_assignments_page, moderator_recent_assignments_page, etc.)
+// remain mostly the same as your original code, with minor adjustments for shift timing display
+// I'll include the most important ones below:
+
+function moderator_product_assignments_page() {
+ // Get assigned roles dynamically
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Handle form submissions for product assignments
+ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ 
+ // Handle product assignment update
+ if (isset($_POST['update_products']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ $updated_count = 0;
+ 
+ // Get all users with assigned roles
+ $all_users = get_users(array(
+ 'role__in' => $assigned_roles,
+ 'fields' => 'ID'
+ ));
+ 
+ foreach ($all_users as $user_id) {
+ if (isset($_POST['moderator_products'][$user_id])) {
+ // Products were selected for this user
+ $product_ids = array_map('intval', $_POST['moderator_products'][$user_id]);
+ $product_ids = array_filter($product_ids); // Remove empty values
+ update_user_meta($user_id, 'moderator_assigned_products', $product_ids);
+ $updated_count++;
+ } else {
+ // No products selected - clear the assignment
+ update_user_meta($user_id, 'moderator_assigned_products', array());
+ $updated_count++;
+ }
+ }
+ 
+ if ($updated_count > 0) {
+ echo '<div class="notice notice-success"><p>Product assignments updated successfully! ' . $updated_count . ' users processed.</p></div>';
+ }
+ }
+ 
+ // Handle bulk actions for product assignments
+ if (isset($_POST['bulk_product_action']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ $bulk_action = $_POST['bulk_product_action'] ?? '';
+ $user_ids = isset($_POST['user_ids']) ? array_map('intval', $_POST['user_ids']) : array();
+ 
+ if ($bulk_action === 'clear_all_products' && empty($user_ids)) {
+ // Clear all users
+ $users = get_users(array('role__in' => $assigned_roles));
+ foreach ($users as $user) {
+ update_user_meta($user->ID, 'moderator_assigned_products', array());
+ }
+ echo '<div class="notice notice-success"><p>All product assignments cleared for all users!</p></div>';
+ } elseif ($bulk_action === 'clear_filtered_products' && !empty($user_ids)) {
+ // Clear only filtered users
+ foreach ($user_ids as $user_id) {
+ update_user_meta($user_id, 'moderator_assigned_products', array());
+ }
+ echo '<div class="notice notice-success"><p>Product assignments cleared for ' . count($user_ids) . ' users!</p></div>';
+ }
+ }
+ }
+ 
+ // Get filter parameters
+ $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
+ $status_filter = isset($_GET['status_filter']) ? sanitize_text_field($_GET['status_filter']) : 'all';
+ $assignment_filter = isset($_GET['assignment_filter']) ? sanitize_text_field($_GET['assignment_filter']) : 'all';
+ $shift_filter = isset($_GET['shift_filter']) ? sanitize_text_field($_GET['shift_filter']) : 'all';
+ 
+ // Base query for users with assigned roles
+ $user_args = array(
+ 'role__in' => $assigned_roles,
+ 'orderby' => 'meta_value_num',
+ 'meta_key' => 'moderator_sequence',
+ 'order' => 'ASC',
+ 'number' => -1
+ );
+ 
+ // Apply search filter
+ if (!empty($search_term)) {
+ $user_args['search'] = '*' . $search_term . '*';
+ $user_args['search_columns'] = array('user_login', 'user_nicename', 'user_email', 'display_name');
+ }
+ 
+ $all_users = get_users($user_args);
+ 
+ // Apply filters
+ $users = array();
+ $stats = array(
+ 'total' => 0,
+ 'active' => 0,
+ 'inactive' => 0,
+ 'in_shift' => 0,
+ 'with_products' => 0,
+ 'without_products' => 0
+ );
+ 
+ foreach ($all_users as $user) {
+ $current_status = get_user_meta($user->ID, 'moderator_status', true) ?: 'active';
+ $assigned_products = get_user_meta($user->ID, 'moderator_assigned_products', true) ?: array();
+ $has_products = !empty($assigned_products);
+ $in_shift = ($current_status === 'active') ? is_user_in_shift_time($user->ID) : false;
+ 
+ // Update stats
+ $stats['total']++;
+ if ($current_status === 'active') $stats['active']++;
+ if ($current_status === 'inactive') $stats['inactive']++;
+ if ($in_shift) $stats['in_shift']++;
+ if ($has_products) $stats['with_products']++;
+ if (!$has_products) $stats['without_products']++;
+ 
+ // Apply status filter
+ $status_match = ($status_filter === 'all' || $current_status === $status_filter);
+ 
+ // Apply assignment filter
+ $assignment_match = false;
+ if ($assignment_filter === 'all') {
+ $assignment_match = true;
+ } elseif ($assignment_filter === 'with_products' && $has_products) {
+ $assignment_match = true;
+ } elseif ($assignment_filter === 'without_products' && !$has_products) {
+ $assignment_match = true;
+ }
+ 
+ // Apply shift filter
+ $shift_match = false;
+ if ($shift_filter === 'all') {
+ $shift_match = true;
+ } elseif ($shift_filter === 'in_shift' && $in_shift) {
+ $shift_match = true;
+ } elseif ($shift_filter === 'out_shift' && !$in_shift && $current_status === 'active') {
+ $shift_match = true;
+ }
+ 
+ if ($status_match && $assignment_match && $shift_match) {
+ $users[] = $user;
+ }
+ }
+ 
+ // Get all products for product assignment
+ $products = wc_get_products(array(
+ 'status' => 'publish',
+ 'limit' => -1,
+ ));
+ ?>
+
+ <div class="wrap">
+ <h1> Assign Products to Users</h1>
+ 
+ <!-- Navigation Tabs -->
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo admin_url('admin.php?page=moderator-settings'); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="nav-tab">Recent Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab nav-tab-active">Product Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ </div>
+
+ <!-- Search and Filters Card -->
+ <div class="card">
+ <h2>Product Assignment Management</h2>
+ <p style="color: #cc1818; font-weight: bold;"> Only active users within their shift time will receive orders for their assigned products.</p>
+ <p>Select specific products for each user. Users without product assignments will receive general orders.</p>
+ <h2> Search & Filter Users</h2>
+ 
+ <form method="get" action="" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
+ <input type="hidden" name="page" value="moderator-product-assignments">
+ 
+ <!-- Search Field -->
+ <div class="filter-group" style="width:100%;">
+ <label for="search" style="display: block; margin-bottom: 5px; font-weight: bold;">Search Users:</label>
+ <input type="text" name="search" id="search" value="<?php echo esc_attr($search_term); ?>" 
+ placeholder="Search by name or email..." style="width: 100%; padding: 8px;">
+ <small style="color: #666;position: absolute;bottom: -4px;">Search by name, username, or email</small>
+ </div>
+ 
+ <!-- Status Filter -->
+ <div class="filter-group" style="width:100%;">
+ <label for="status_filter" style="display: block; margin-bottom: 5px; font-weight: bold;">Status Filter:</label>
+ <select name="status_filter" id="status_filter" style="width: 100%; padding: 8px;">
+ <option value="all" <?php selected($status_filter, 'all'); ?>>All Statuses</option>
+ <option value="active" <?php selected($status_filter, 'active'); ?>>Active Only</option>
+ <option value="inactive" <?php selected($status_filter, 'inactive'); ?>>Inactive Only</option>
+ </select>
+ </div>
+ 
+ <!-- Shift Filter -->
+ <div class="filter-group" style="width:100%;">
+ <label for="shift_filter" style="display: block; margin-bottom: 5px; font-weight: bold;">Shift Status:</label>
+ <select name="shift_filter" id="shift_filter" style="width: 100%; padding: 8px;">
+ <option value="all" <?php selected($shift_filter, 'all'); ?>>All Shifts</option>
+ <option value="in_shift" <?php selected($shift_filter, 'in_shift'); ?>>In Shift Now</option>
+ <option value="out_shift" <?php selected($shift_filter, 'out_shift'); ?>>Out of Shift</option>
+ </select>
+ </div>
+ 
+ <!-- Action Buttons -->
+ <div class="filter-group" style="width:100%;display: flex; gap: 10px; align-items: center;">
+ <button type="submit" class="button button-primary" style="padding: 8px 20px;">
+ <span class="dashicons dashicons-search"></span> Apply Filters
+ </button>
+ <a href="?page=moderator-product-assignments" class="button button-secondary" style="padding: 8px 20px;">
+ <span class="dashicons dashicons-update"></span> Reset
+ </a>
+ </div>
+ </form>
+ 
+ <!-- Results Summary -->
+ <div style="margin-top: 20px; padding: 15px; background: #f0f6ff; border-radius: 6px;">
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; text-align: center;">
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #0073aa;"><?php echo count($users); ?></div>
+ <div style="font-size: 12px;">Showing</div>
+ </div>
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #46b450;"><?php echo $stats['active']; ?></div>
+ <div style="font-size: 12px;">Active</div>
+ </div>
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #FF9800;"><?php echo $stats['in_shift']; ?></div>
+ <div style="font-size: 12px;">In Shift Now</div>
+ </div>
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #cc1818;"><?php echo $stats['inactive']; ?></div>
+ <div style="font-size: 12px;">Inactive</div>
+ </div>
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #ffb900;"><?php echo $stats['with_products']; ?></div>
+ <div style="font-size: 12px;">With Products</div>
+ </div>
+ <div>
+ <div style="font-size: 20px; font-weight: bold; color: #dc3232;"><?php echo $stats['without_products']; ?></div>
+ <div style="font-size: 12px;">Without Products</div>
+ </div>
+ </div>
+ 
+ <?php if (!empty($search_term)): ?>
+ <div style="margin-top: 10px; text-align: center;">
+ <strong>Search results for:</strong> "<?php echo esc_html($search_term); ?>"
+ </div>
+ <?php endif; ?>
+ 
+ <?php if ($status_filter !== 'all' || $shift_filter !== 'all'): ?>
+ <div style="margin-top: 5px; text-align: center; font-size: 12px; color: #666;">
+ <strong>Filters:</strong> 
+ <?php 
+ $active_filters = array();
+ if ($status_filter !== 'all') $active_filters[] = 'Status: ' . ucfirst($status_filter);
+ if ($shift_filter !== 'all') $active_filters[] = 'Shift: ' . str_replace('_', ' ', ucfirst($shift_filter));
+ echo implode(' ', $active_filters);
+ ?>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <?php if (empty($users)): ?>
+ <div style="text-align: center; padding: 40px;">
+ <div style="font-size: 48px; color: #ccc; margin-bottom: 20px;"></div>
+ <h3>No users found</h3>
+ <p>No users match your current search and filter criteria.</p>
+ <a href="?page=moderator-product-assignments" class="button button-primary">Show All Users</a>
+ </div>
+ <?php else: ?>
+ 
+ <form method="post" id="moderator-products-form">
+ <?php wp_nonce_field('moderator_settings', 'moderator_nonce'); ?>
+ 
+ <table class="wp-list-table widefat fixed striped" id="moderator-products-table">
+ <thead>
+ <tr>
+ <th style="width: 80px;">Sequence</th>
+ <th style="width: 150px;">User Name</th>
+ <th style="width: 100px;">Status</th>
+ <th style="width: 100px;">Shift Status</th>
+ <th style="width: 300px;">Assigned Products</th>
+ <th style="width: 120px;">Actions</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php foreach ($users as $user): ?>
+ <?php 
+ $current_sequence = get_user_meta($user->ID, 'moderator_sequence', true) ?: 0;
+ $assigned_products = get_user_meta($user->ID, 'moderator_assigned_products', true) ?: array();
+ $current_status = get_user_meta($user->ID, 'moderator_status', true) ?: 'active';
+ $in_shift = ($current_status === 'active') ? is_user_in_shift_time($user->ID) : false;
+ 
+ // Get product details for display
+ $assigned_product_details = array();
+ foreach ($assigned_products as $product_id) {
+ $product = wc_get_product($product_id);
+ if ($product) {
+ $assigned_product_details[] = array(
+ 'id' => $product_id,
+ 'name' => $product->get_name(),
+ 'price' => $product->get_price(),
+ 'type' => $product->get_type()
+ );
+ }
+ }
+ ?>
+ <tr class="user-<?php echo $current_status; ?>">
+ <td>
+ <div class="sequence-badge"><?php echo $current_sequence; ?></div>
+ </td>
+ <td>
+ <div class="user-info">
+ <strong><?php echo esc_html($user->display_name); ?></strong>
+ <div class="user-email"><?php echo esc_html($user->user_email); ?></div>
+ </div>
+ </td>
+ <td>
+ <span class="status-badge status-<?php echo $current_status; ?>">
+ <span class="dashicons dashicons-<?php echo $current_status === 'active' ? 'yes' : 'no'; ?>"></span>
+ <?php echo ucfirst($current_status); ?>
+ </span>
+ </td>
+ <td>
+ <?php if ($current_status === 'active'): ?>
+ <span class="shift-badge shift-<?php echo $in_shift ? 'in' : 'out'; ?>">
+ <span class="dashicons dashicons-<?php echo $in_shift ? 'clock' : 'no-alt'; ?>"></span>
+ <?php echo $in_shift ? 'In Shift' : 'Out of Shift'; ?>
+ </span>
+ <?php else: ?>
+ <span class="shift-badge shift-inactive">
+ <span class="dashicons dashicons-no"></span>
+ Inactive
+ </span>
+ <?php endif; ?>
+ </td>
+ <td>
+ <div class="assigned-products-container">
+ <!-- Product Selection with Select2 -->
+ <select name="moderator_products[<?php echo $user->ID; ?>][]" multiple="multiple" class="moderator-products-select" style="width: 100%;">
+ <?php foreach ($products as $product): ?>
+ <option value="<?php echo $product->get_id(); ?>" 
+ <?php selected(in_array($product->get_id(), $assigned_products)); ?>>
+ <?php echo esc_html($product->get_name()); ?> (ID: <?php echo $product->get_id(); ?>)
+ </option>
+ <?php endforeach; ?>
+ </select>
+ 
+ <!-- Current Assignment Summary -->
+ <div class="assignment-summary">
+ <?php if (empty($assigned_products)): ?>
+ <div class="no-assignment">
+ <span class="dashicons dashicons-warning"></span>
+ <div class="warning-text">
+ <strong>No Products Assigned</strong>
+ <span>This user will receive general orders only</span>
+ </div>
+ </div>
+ <?php else: ?>
+ <div class="has-assignment">
+ <div class="assignment-header">
+ <span class="dashicons dashicons-yes-alt"></span>
+ <div class="assignment-stats">
+ <strong><?php echo count($assigned_products); ?> Product<?php echo count($assigned_products) > 1 ? 's' : ''; ?> Assigned</strong>
+ <span>Will receive orders for these products</span>
+ </div>
+ </div>
+ </div>
+ <?php endif; ?>
+ </div>
+ </div>
+ </td>
+ <td>
+ <div class="action-buttons">
+ <button type="button" class="button button-small clear-products" data-user-id="<?php echo $user->ID; ?>">
+ <span class="dashicons dashicons-trash"></span>
+ Clear All
+ </button>
+ </div>
+ </td>
+ </tr>
+ <?php endforeach; ?>
+ </tbody>
+ </table>
+ 
+ <p style="margin-top: 15px;">
+ <input type="submit" name="update_products" class="button button-primary" value=" Update All Product Assignments">
+ </p>
+ </form>
+ <?php endif; ?>
+ </div>
+
+ <!-- Bulk Actions -->
+ <div class="card">
+ <h2>Quick Product Management</h2>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+ <div>
+ <h4 style="margin-top: 0;">Bulk Actions</h4>
+ <form method="post" style="display: flex; gap: 10px; align-items: center;">
+ <?php wp_nonce_field('moderator_settings', 'moderator_nonce'); ?>
+ <input type="hidden" name="user_ids" value="<?php echo implode(',', array_map(function($u) { return $u->ID; }, $users)); ?>">
+ <select name="bulk_product_action" id="bulk_product_action" style="flex: 1;">
+ <option value="">Select Action</option>
+ <option value="clear_all_products">Clear All Product Assignments</option>
+ <option value="clear_filtered_products">Clear Filtered Assignments</option>
+ </select>
+ <input type="submit" name="bulk_product_update" class="button" value="Apply" 
+ onclick="return confirm('Are you sure? This will remove product assignments.')">
+ </form>
+ </div>
+ 
+ <div>
+ <h4 style="margin-top: 0;">Quick Filters</h4>
+ <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+ <a href="?page=moderator-product-assignments&assignment_filter=without_products" 
+ class="button button-small <?php echo $assignment_filter === 'without_products' ? 'button-primary' : 'button-secondary'; ?>">
+ Without Products
+ </a>
+ <a href="?page=moderator-product-assignments&shift_filter=in_shift" 
+ class="button button-small <?php echo $shift_filter === 'in_shift' ? 'button-primary' : 'button-secondary'; ?>">
+ In Shift
+ </a>
+ <a href="?page=moderator-product-assignments&status_filter=inactive" 
+ class="button button-small <?php echo $status_filter === 'inactive' ? 'button-primary' : 'button-secondary'; ?>">
+ Inactive
+ </a>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+
+ <!-- Select2 Implementation Script -->
+ <script type="text/javascript">
+ jQuery(document).ready(function($) {
+ // Initialize Select2 on all product selects
+ $('.moderator-products-select').select2({
+ placeholder: "Select products - Required for specialized assignment",
+ allowClear: true,
+ width: '100%',
+ closeOnSelect: false
+ });
+
+ // Clear products for specific user
+ $('.clear-products').on('click', function(e) {
+ e.preventDefault();
+ 
+ var $button = $(this);
+ var userName = $button.closest('tr').find('.user-info strong').text();
+ var $select = $button.closest('tr').find('.moderator-products-select');
+ var $assignmentSummary = $select.siblings('.assignment-summary');
+ 
+ if (confirm('Are you sure you want to clear ALL product assignments for ' + userName + '?')) {
+ // Clear Select2
+ $select.val(null).trigger('change');
+ 
+ // Update assignment summary
+ $assignmentSummary.html(`
+ <div class="no-assignment">
+ <span class="dashicons dashicons-warning"></span>
+ <div class="warning-text">
+ <strong>No Products Assigned</strong>
+ <span>This user will receive general orders only</span>
+ </div>
+ </div>
+ `);
+ 
+ // Show success feedback
+ $button.html('<span class="dashicons dashicons-yes"></span> Cleared!').prop('disabled', true);
+ setTimeout(function() {
+ $button.html('<span class="dashicons dashicons-trash"></span> Clear All').prop('disabled', false);
+ }, 2000);
+ }
+ });
+
+ // Focus on search field when page loads if there's a search term
+ <?php if (!empty($search_term)): ?>
+ $('#search').focus();
+ <?php endif; ?>
+ });
+ </script>
+
+ <style>
+ .card{max-width: 100%;}
+ .sequence-badge {
+ display: inline-block;
+ width: 30px;
+ height: 30px;
+ background: #0073aa;
+ color: white;
+ text-align: center;
+ line-height: 30px;
+ border-radius: 50%;
+ font-weight: bold;
+ }
+ .status-badge {
+ padding: 4px 8px;
+ border-radius: 3px;
+ font-size: 12px;
+ font-weight: bold;
+ }
+ .status-active { background: #46b450; color: white; }
+ .status-inactive { background: #cc1818; color: white; }
+ .shift-badge {
+ padding: 4px 8px;
+ border-radius: 3px;
+ font-size: 12px;
+ font-weight: bold;
+ display: inline-block;
+ }
+ .shift-in { background: #e5f7e5; color: #46b450; border: 1px solid #46b450; }
+ .shift-out { background: #fff8e1; color: #ffb900; border: 1px solid #ffb900; }
+ .shift-inactive { background: #ffe5e5; color: #cc1818; border: 1px solid #cc1818; }
+ .no-assignment {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ padding: 10px;
+ background: #fff5f5;
+ border: 1px solid #ffd6d6;
+ border-radius: 4px;
+ margin-top: 10px;
+ }
+ .no-assignment .dashicons { color: #cc1818; }
+ .has-assignment {
+ padding: 10px;
+ background: #f8fff8;
+ border: 1px solid #d6ffd6;
+ border-radius: 4px;
+ margin-top: 10px;
+ }
+ .assignment-header {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ margin-bottom: 10px;
+ }
+ .assignment-header .dashicons { color: #46b450; }
+ .action-buttons .button {
+ display: flex;
+ align-items: center;
+ gap: 5px;
+ justify-content: center;
+ text-align: center;
+ padding: 6px 10px;
+ font-size: 12px;
+ line-height: 1.3;
+ }
+ .clear-products {
+ background: #dc3232;
+ color: white;
+ border-color: #dc3232;
+ }
+ .clear-products:hover {
+ background: #a00;
+ border-color: #a00;
+ color: white;
+ }
+ .nav-tab-wrapper { margin: 20px 0; }
+ .nav-tab { 
+ text-decoration: none; 
+ padding: 10px 15px; 
+ margin: 0 5px 0 0; 
+ border: 1px solid #ccd0d4;
+ border-bottom: none;
+ background: #f0f0f0;
+ }
+ .nav-tab-active { 
+ background: #0073aa; 
+ color: white; 
+ border-bottom: 1px solid #0073aa;
+ }
+ .filter-group {
+ margin-bottom: 0;
+ }
+ </style>
+ <?php
+}
+
+
+// Enqueue Select2 CSS and JS from CDN
+add_action('admin_enqueue_scripts', 'enqueue_select2_assets');
+
+function enqueue_select2_assets($hook) {
+ if (strpos($hook, 'moderator-') !== false) {
+ wp_enqueue_style('select2-css', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css', array(), '4.0.13');
+ wp_enqueue_script('select2-js', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js', array('jquery'), '4.0.13', true);
+ 
+ wp_add_inline_style('select2-css', '
+ .select2-container {
+ width: 100% !important;
+ }
+ .select2-selection--multiple {
+ min-height: 90px !important;
+ border: 1px solid #ddd !important;
+ border-radius: 4px !important;
+ }
+ .select2-selection--multiple .select2-selection__choice {
+ background: #0073aa !important;
+ color: white !important;
+ border: none !important;
+ border-radius: 3px !important;
+ padding: 2px 8px !important;
+ margin: 2px !important;
+ }
+ .select2-selection--multiple .select2-selection__choice__remove {
+ color: white !important;
+ margin-right: 5px !important;
+ }
+ .select2-selection--multiple .select2-selection__choice__remove:hover {
+ color: #ffcccc !important;
+ }
+ .assigned-products-container {
+ max-width: 300px;
+ }
+ ');
+ }
+}
+
+function moderator_recent_assignments_page() {
+ // ADD: Get assigned roles dynamically
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Get filter parameters
+ $moderator_filter = isset($_GET['moderator_filter']) ? absint($_GET['moderator_filter']) : 0;
+ $allowed_statuses = array('pending', 'partial', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed');
+ $status_filter = isset($_GET['status_filter']) ? sanitize_key($_GET['status_filter']) : 'all';
+ if ($status_filter !== 'all' && !in_array($status_filter, $allowed_statuses, true)) {
+ $status_filter = 'all';
+ }
+ $remote_settings = aoam_get_remote_import_settings();
+ $remote_source_options = array();
+ foreach (($remote_settings['sources'] ?? array()) as $remote_source) {
+ if (!empty($remote_source['site_url'])) {
+ $source_url = esc_url_raw($remote_source['site_url']);
+ $remote_source_options[md5(untrailingslashit($source_url))] = $source_url;
+ }
+ }
+ $source_filter = isset($_GET['source_filter']) ? sanitize_key($_GET['source_filter']) : 'all';
+ if ($source_filter !== 'all' && $source_filter !== 'current' && !isset($remote_source_options[$source_filter])) {
+ $source_filter = 'all';
+ }
+ $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+ 
+ // CHANGED: Get per_page from GET parameter
+ $per_page = isset($_GET['per_page']) ? absint($_GET['per_page']) : 20;
+ if (!in_array($per_page, array(10, 20, 50, 100), true)) {
+ $per_page = 20;
+ }
+ 
+ // CHANGED: Get users with assigned roles
+ $moderators = get_users(array(
+ 'role__in' => $assigned_roles, // CHANGED: 'role' => 'moderator'
+ 'orderby' => 'display_name'
+ ));
+
+ // ADD: Get today's date for filtering
+ $today_date = current_time('Y-m-d');
+ $today_start = $today_date . ' 00:00:00';
+ $today_end = $today_date . ' 23:59:59';
+
+ ?>
+ <div class="wrap">
+        <h1>Recent Assignments</h1>
+ 
+ <!-- Navigation Tabs -->
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo admin_url('admin.php?page=moderator-settings'); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="nav-tab nav-tab-active">Recent Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
+ <!-- ADD: Plugin Settings tab -->
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ </div>
+
+ 
+
+ <?php
+ // Query assigned orders from HPOS order data while keeping pagination in SQL.
+ $status_counts = array(
+ 'all' => 0,
+ 'pending' => 0,
+ 'partial' => 0,
+ 'processing' => 0,
+ 'on-hold' => 0,
+ 'completed' => 0,
+ 'cancelled' => 0,
+ 'refunded' => 0,
+ 'failed' => 0
+ );
+
+ $orders = array();
+ $total_orders = 0;
+ $total_pages = 0;
+ $today_orders_count = 0;
+
+ global $wpdb;
+ $orders_table = $wpdb->prefix . 'wc_orders';
+ $orders_meta_table = $wpdb->prefix . 'wc_orders_meta';
+ $orders_meta_table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $orders_meta_table)) === $orders_meta_table;
+ $base_where = array(
+ 'pm.meta_key = %s',
+ 'o.type = %s',
+ );
+ $base_params = array('_assigned_moderator_id', 'shop_order');
+ if ($moderator_filter > 0) {
+ $base_where[] = 'pm.meta_value = %s';
+ $base_params[] = (string) $moderator_filter;
+ }
+ if ($source_filter === 'current') {
+ $base_where[] = "NOT EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} source_pm
+ WHERE source_pm.post_id = pm.post_id
+ AND source_pm.meta_key IN ('_aoam_remote_order_source', '_aoam_remote_order_key')
+ )";
+ if ($orders_meta_table_exists) {
+ $base_where[] = "NOT EXISTS (
+ SELECT 1 FROM {$orders_meta_table} source_om
+ WHERE source_om.order_id = pm.post_id
+ AND source_om.meta_key IN ('_aoam_remote_order_source', '_aoam_remote_order_key')
+ )";
+ }
+ } elseif (isset($remote_source_options[$source_filter])) {
+ $remote_source_where = array(
+ "EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} source_pm
+ WHERE source_pm.post_id = pm.post_id
+ AND (
+ (source_pm.meta_key = '_aoam_remote_order_source' AND source_pm.meta_value = %s)
+ OR (source_pm.meta_key = '_aoam_remote_order_key' AND source_pm.meta_value LIKE %s)
+ )
+ )"
+ );
+ $base_params[] = $remote_source_options[$source_filter];
+ $base_params[] = $source_filter . ':%';
+ if ($orders_meta_table_exists) {
+ $remote_source_where[] = "EXISTS (
+ SELECT 1 FROM {$orders_meta_table} source_om
+ WHERE source_om.order_id = pm.post_id
+ AND (
+ (source_om.meta_key = '_aoam_remote_order_source' AND source_om.meta_value = %s)
+ OR (source_om.meta_key = '_aoam_remote_order_key' AND source_om.meta_value LIKE %s)
+ )
+ )";
+ $base_params[] = $remote_source_options[$source_filter];
+ $base_params[] = $source_filter . ':%';
+ }
+ $base_where[] = '(' . implode(' OR ', $remote_source_where) . ')';
+ }
+
+ $base_where_sql = implode(' AND ', $base_where);
+ $status_rows = $wpdb->get_results($wpdb->prepare("
+ SELECT o.status, COUNT(DISTINCT pm.post_id) AS total
+ FROM {$wpdb->postmeta} pm
+ INNER JOIN {$orders_table} o ON o.id = pm.post_id
+ WHERE {$base_where_sql}
+ GROUP BY o.status
+ ", $base_params));
+ foreach ($status_rows as $status_row) {
+ $status_key = preg_replace('/^wc-/', '', (string) $status_row->status);
+ $count = (int) $status_row->total;
+ $status_counts['all'] += $count;
+ if (isset($status_counts[$status_key])) {
+ $status_counts[$status_key] = $count;
+ }
+ }
+ $total_orders = $status_counts['all'];
+
+ if ($status_filter !== 'all') {
+ $total_orders = $status_counts[$status_filter] ?? 0;
+ }
+
+ $today_where = $base_where;
+ $today_where[] = 'o.date_created_gmt >= %s';
+ $today_where[] = 'o.date_created_gmt <= %s';
+ $today_params = array_merge($base_params, array(get_gmt_from_date($today_start), get_gmt_from_date($today_end)));
+ $today_orders_count = (int) $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(DISTINCT pm.post_id)
+ FROM {$wpdb->postmeta} pm
+ INNER JOIN {$orders_table} o ON o.id = pm.post_id
+ WHERE " . implode(' AND ', $today_where) . "
+ ", $today_params));
+
+ $query_where = $base_where;
+ $query_params = $base_params;
+ if ($status_filter !== 'all') {
+ $query_where[] = 'o.status = %s';
+ $query_params[] = 'wc-' . $status_filter;
+ }
+ $total_pages = $total_orders > 0 ? (int) ceil($total_orders / $per_page) : 0;
+ $paged = $total_pages > 0 ? min($paged, $total_pages) : 1;
+ $offset = ($paged - 1) * $per_page;
+ $query_params[] = $per_page;
+ $query_params[] = $offset;
+ $order_ids = $wpdb->get_col($wpdb->prepare("
+ SELECT DISTINCT pm.post_id
+ FROM {$wpdb->postmeta} pm
+ INNER JOIN {$orders_table} o ON o.id = pm.post_id
+ WHERE " . implode(' AND ', $query_where) . "
+ ORDER BY o.date_created_gmt DESC, pm.meta_id DESC
+ LIMIT %d OFFSET %d
+ ", $query_params));
+ $orders = array_filter(array_map('wc_get_order', array_map('absint', $order_ids)));
+ ?>
+ 
+ <!-- Results Summary -->
+ <div class="card">
+ <h2>Assignment Results</h2>
+ <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
+ <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #0073aa;"><?php echo esc_html($total_orders); ?></div>
+ <div>Total Orders</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #46b450;"><?php echo esc_html($today_orders_count); ?></div>
+ <div>Today Orders</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #46b450;"><?php echo esc_html(count($orders)); ?></div>
+ <div>Showing</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #ffb900;"><?php echo esc_html($total_pages); ?></div>
+ <div>Total Pages</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #cc1818;"><?php echo esc_html(count($moderators)); ?></div>
+ <div>Total Users</div> <!-- CHANGED: Moderators -> Users -->
+ </div>
+ </div>
+ 
+ <!-- Status Breakdown -->
+ <div style="margin-top: 20px;">
+ <h3>Order Status Breakdown</h3>
+ <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+ <?php foreach ($status_counts as $status => $count): 
+ if ($status === 'all') continue;
+ if ($count > 0):
+ $status_class = 'status-' . $status;
+ $status_label = wc_get_order_status_name($status);
+ ?>
+ <div class="status-count-badge <?php echo esc_attr($status_class); ?>">
+ <span class="status-label"><?php echo esc_html($status_label); ?></span>
+ <span class="status-count"><?php echo esc_html($count); ?></span>
+ </div>
+ <?php endif; endforeach; ?>
+ </div>
+ </div>
+ 
+ <?php if ($moderator_filter > 0): ?>
+ <?php 
+ $moderator = get_userdata($moderator_filter);
+ $moderator_name = $moderator ? $moderator->display_name : 'Unknown';
+ $moderator_sequence = get_user_meta($moderator_filter, 'moderator_sequence', true);
+ ?>
+ <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 4px;">
+ <strong>Currently viewing orders for:</strong> 
+ <?php echo esc_html($moderator_name); ?>
+ <?php if ($moderator_sequence): ?>
+ (User <?php echo $moderator_sequence; ?>) <!-- CHANGED: Moderator -> User -->
+ <?php endif; ?>
+ <?php if ($status_filter !== 'all'): ?>
+ | Status: <strong><?php echo esc_html(ucfirst($status_filter)); ?></strong>
+ <?php endif; ?>
+ <?php if ($source_filter !== 'all'): ?>
+ | Source: <strong><?php echo esc_html($source_filter === 'current' ? 'Current Site' : parse_url($remote_source_options[$source_filter] ?? '', PHP_URL_HOST)); ?></strong>
+ <?php endif; ?>
+ </div>
+ <?php endif; ?>
+ </div>
+
+ <!-- Filters -->
+ <div class="card">
+ <h2>Assignment Filters</h2>
+ <div class="assignment-filters" style="padding: 15px; background: #f9f9f9; border-radius: 4px;">
+ <form method="get" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+ <input type="hidden" name="page" value="moderator-recent-assignments">
+ 
+ <div class="filter-group">
+ <label for="moderator_filter" style="font-weight: bold; margin-right: 5px;">Filter by User:</label> 
+ <select name="moderator_filter" id="moderator_filter" onchange="this.form.submit()">
+ <option value="0">All Users</option> <!-- CHANGED: Moderators -> Users -->
+ <?php foreach ($moderators as $mod): 
+ $mod_sequence = get_user_meta($mod->ID, 'moderator_sequence', true);
+ $display_name = $mod->display_name . ($mod_sequence ? ' (User ' . $mod_sequence . ')' : ''); 
+ ?>
+ <option value="<?php echo $mod->ID; ?>" <?php selected($moderator_filter, $mod->ID); ?>>
+ <?php echo esc_html($display_name); ?>
+ </option>
+ <?php endforeach; ?>
+ </select>
+ </div>
+
+ <div class="filter-group">
+ <label for="source_filter" style="font-weight: bold; margin-right: 5px;">Order Source:</label>
+ <select name="source_filter" id="source_filter" onchange="this.form.submit()">
+ <option value="all" <?php selected($source_filter, 'all'); ?>>All Sources</option>
+ <option value="current" <?php selected($source_filter, 'current'); ?>>Current Site</option>
+ <?php foreach ($remote_source_options as $source_key => $source_url): ?>
+ <option value="<?php echo esc_attr($source_key); ?>" <?php selected($source_filter, $source_key); ?>>
+ Remote: <?php echo esc_html(parse_url($source_url, PHP_URL_HOST) ?: $source_url); ?>
+ </option>
+ <?php endforeach; ?>
+ </select>
+ </div>
+  
+ <div class="filter-group">
+ <label for="status_filter" style="font-weight: bold; margin-right: 5px;">Order Status:</label>
+ <select name="status_filter" id="status_filter" onchange="this.form.submit()">
+ <option value="all" <?php selected($status_filter, 'all'); ?>>All Statuses</option>
+ <option value="pending" <?php selected($status_filter, 'pending'); ?>>Pending</option>
+ <option value="partial" <?php selected($status_filter, 'partial'); ?>>Partial</option>
+ <option value="processing" <?php selected($status_filter, 'processing'); ?>>Processing</option>
+ <option value="on-hold" <?php selected($status_filter, 'on-hold'); ?>>On Hold</option>
+ <option value="completed" <?php selected($status_filter, 'completed'); ?>>Completed</option>
+ <option value="cancelled" <?php selected($status_filter, 'cancelled'); ?>>Cancelled</option>
+ <option value="refunded" <?php selected($status_filter, 'refunded'); ?>>Refunded</option>
+ <option value="failed" <?php selected($status_filter, 'failed'); ?>>Failed</option>
+ </select>
+ </div>
+ 
+ <div class="filter-group">
+ <label for="per_page" style="font-weight: bold; margin-right: 5px;">Orders per page:</label>
+ <select name="per_page" id="per_page" onchange="this.form.submit()">
+ <option value="10" <?php selected($per_page, 10); ?>>10</option>
+ <option value="20" <?php selected($per_page, 20); ?>>20</option>
+ <option value="50" <?php selected($per_page, 50); ?>>50</option>
+ <option value="100" <?php selected($per_page, 100); ?>>100</option>
+ </select>
+ </div>
+ 
+ <div class="filter-group">
+ <button type="submit" class="button button-primary">Apply Filters</button>
+ <a href="?page=moderator-recent-assignments" class="button button-secondary">Reset Filters</a>
+ </div>
+ </form>
+ </div>
+ </div>
+
+ <!-- Orders Table -->
+ <div class="card">
+ <h2>Assigned Orders</h2>
+ 
+ <?php if (!empty($orders)): ?>
+ <div class="table-wrapper">
+ <table class="wp-list-table widefat fixed striped fixed-table">
+ <thead>
+ <tr>
+ <th style="width: 80px;">Order #</th>
+ <th style="width: 120px;">Date</th>
+ <th style="width: 150px;">Customer</th>
+ <th style="width: 200px;">Products</th>
+ <th style="width: 100px;">Total</th>
+ <th style="width: 150px;">Assigned User</th> <!-- CHANGED: Moderator -> User -->
+ <th style="width: 80px;">Sequence</th>
+ <th style="width: 100px;">Status</th>
+ <th style="width: 120px;">Actions</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php foreach ($orders as $order): ?>
+ <?php
+ $moderator_id = get_post_meta($order->get_id(), '_assigned_moderator_id', true);
+ $moderator_sequence = get_post_meta($order->get_id(), '_assigned_moderator_sequence', true);
+ if ($moderator_id):
+ $moderator = get_userdata($moderator_id);
+ $moderator_status = get_user_meta($moderator_id, 'moderator_status', true) ?: 'active';
+ 
+ // Get order items
+ $items = $order->get_items();
+ $product_names = array();
+ foreach ($items as $item) {
+ $product_names[] = $item->get_name();
+ }
+ ?>
+ <tr>
+ <td>
+ <strong>#<?php echo esc_html($order->get_id()); ?></strong>
+ </td>
+ <td>
+ <?php echo esc_html(aoam_format_order_local_date($order, 'M j, Y')); ?><br>
+ <small style="color: #666;"><?php echo esc_html(aoam_format_order_local_date($order, 'g:i A')); ?></small>
+ </td>
+ <td>
+ <strong><?php echo esc_html($order->get_formatted_billing_full_name()); ?></strong><br>
+ <small><?php echo esc_html($order->get_billing_email()); ?></small><br>
+ <small style="color: #666;"><?php echo esc_html($order->get_billing_phone()); ?></small>
+ </td>
+ <td>
+ <div class="order-products">
+ <?php 
+ $display_count = 0;
+ foreach ($product_names as $product_name) {
+ if ($display_count >= 2) break;
+                                            echo '<div class="product-name">- ' . esc_html($product_name) . '</div>';
+ $display_count++;
+ }
+ if (count($product_names) > 2): ?>
+ <div class="more-products">
+ + <?php echo esc_html(count($product_names) - 2); ?> more products
+ </div>
+ <?php endif; ?>
+ </div>
+ </td>
+ <td>
+ <strong><?php echo wp_kses_post($order->get_formatted_order_total()); ?></strong>
+ </td>
+ <td>
+ <div class="moderator-info">
+ <strong><?php echo esc_html($moderator ? $moderator->display_name : 'Unknown User'); ?></strong>
+ <?php if ($moderator_status == 'inactive'): ?>
+ <span class="moderator-inactive-badge">(Inactive)</span>
+ <?php endif; ?>
+ <br>
+ <small><?php echo esc_html($moderator ? $moderator->user_email : ''); ?></small>
+ </div>
+ </td>
+ <td>
+ <?php if ($moderator_sequence): ?>
+ <span class="sequence-badge-small"><?php echo esc_html($moderator_sequence); ?></span>
+ <?php else: ?>
+ <span style="color:#ccc; font-size: 12px;">N/A</span>
+ <?php endif; ?>
+ </td>
+ <td>
+ <?php 
+ $order_status = $order->get_status();
+ $status_class = 'status-' . $order_status;
+ $status_label = wc_get_order_status_name($order_status);
+ ?>
+ <span class="order-status-badge <?php echo esc_attr($status_class); ?>">
+ <?php echo esc_html($status_label); ?>
+ </span>
+ </td>
+ <td>
+ <div class="order-actions">
+ <a href="<?php echo esc_url(get_edit_post_link($order->get_id())); ?>" class="button button-small" target="_blank" title="Edit Order">
+ <span class="dashicons dashicons-edit"></span>
+ Edit
+ </a>
+ <button type="button" class="button button-small view-order-details" data-order-id="<?php echo esc_attr($order->get_id()); ?>" title="View Details">
+ <span class="dashicons dashicons-visibility"></span>
+ View
+ </button>
+ </div>
+ </td>
+ </tr>
+ <?php endif; ?>
+ <?php endforeach; ?>
+ </tbody>
+ </table>
+ </div>
+
+ 
+ <!-- Pagination -->
+ <?php if ($total_pages > 1): ?>
+ <div class="tablenav" style="margin-top: 20px;">
+ <div class="tablenav-pages">
+ <span class="displaying-num"><?php echo esc_html($total_orders); ?> items</span>
+ <span class="pagination-links">
+ <?php
+ $base_url = add_query_arg(array(
+ 'page' => 'moderator-recent-assignments',
+ 'moderator_filter' => $moderator_filter,
+ 'status_filter' => $status_filter,
+ 'source_filter' => $source_filter,
+ 'per_page' => $per_page,
+ ), admin_url('admin.php'));
+ 
+ // Previous page
+ if ($paged > 1) {
+ echo '<a class="prev-page button" href="' . esc_url(add_query_arg('paged', $paged - 1, $base_url)) . '"> Previous</a>';
+ }
+ 
+ // Page numbers
+ $start_page = max(1, $paged - 2);
+ $end_page = min($total_pages, $paged + 2);
+ 
+ for ($i = $start_page; $i <= $end_page; $i++) {
+ if ($i == $paged) {
+ echo '<span class="current-page button">' . esc_html($i) . '</span>';
+ } else {
+ echo '<a class="page-number button" href="' . esc_url(add_query_arg('paged', $i, $base_url)) . '">' . esc_html($i) . '</a>';
+ }
+ }
+ 
+ // Next page
+ if ($paged < $total_pages) {
+ echo '<a class="next-page button" href="' . esc_url(add_query_arg('paged', $paged + 1, $base_url)) . '">Next </a>';
+ }
+ ?>
+ </span>
+ </div>
+ </div>
+ <?php endif; ?>
+ 
+ <?php else: ?>
+ <div style="text-align: center; padding: 40px;">
+                    <h3>No orders found</h3>
+ <p>No orders match the current filters.</p>
+ <?php if ($status_counts['all'] > 0 && $status_filter !== 'all'): ?>
+ <p style="color: #666;">
+ There are <?php echo esc_html($status_counts['all']); ?> assigned orders, but none with status "<?php echo esc_html($status_filter); ?>".
+ </p>
+ <?php endif; ?>
+ <a href="?page=moderator-recent-assignments" class="button button-primary">Reset Filters</a>
+ </div>
+ <?php endif; ?>
+ </div>
+
+ <!-- Export Options -->
+ <div class="card">
+ <h2>Export Options</h2>
+ <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+ <button type="button" class="button" onclick="exportAssignments('csv')">
+ <span class="dashicons dashicons-download"></span>
+ Export to CSV
+ </button>
+ <button type="button" class="button" onclick="exportAssignments('pdf')">
+ <span class="dashicons dashicons-pdf"></span>
+ Export to PDF
+ </button>
+ <button type="button" class="button" onclick="printAssignments()">
+ <span class="dashicons dashicons-printer"></span>
+ Print Report
+ </button>
+ </div>
+ </div>
+ </div>
+ 
+ <!-- Order Details Modal -->
+ <div id="order-details-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 2px solid #0073aa; z-index: 10000; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+ <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
+ <h3 style="margin: 0;">Order Details - #<span id="modal-order-id"></span></h3>
+ <button type="button" class="button" onclick="closeOrderModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;"></button>
+ </div>
+ <div id="order-details-content"></div>
+ </div>
+ 
+ <style>
+ .table-wrapper {
+ width: 100%;
+ overflow-x: auto; 
+ position: relative;
+ }
+
+ /* Basic table design */
+ .fixed-table {
+ border-collapse: collapse;
+ width: max-content;
+ min-width: 100%;
+ }
+
+ .fixed-table th,
+ .fixed-table td {
+ border: 1px solid #ccc;
+ padding: 10px;
+ white-space: nowrap;
+ background: #fff;
+ }
+
+ /* --- FIXED FIRST 2 COLUMNS --- */
+ .fixed-table th:nth-child(1),
+ .fixed-table td:nth-child(1) {
+ position: sticky;
+ left: 0;
+ z-index: 5;
+ background: #fff;
+ }
+
+ .fixed-table th:nth-child(2),
+ .fixed-table td:nth-child(2) {
+ position: sticky;
+ left: 120px; /* 1st column width */
+ z-index: 5;
+ background: #fff;
+ }
+
+ /* --- FIXED LAST COLUMN --- */
+ .fixed-table th:last-child,
+ .fixed-table td:last-child {
+ position: sticky;
+ right: 0;
+ z-index: 5;
+ background: #fff;
+ }
+ .card { 
+ margin: 20px 0; 
+ padding: 20px; 
+ background: #fff; 
+ border: 1px solid #ccd0d4; 
+ border-radius: 8px;
+ box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+ max-width: 100%;
+ }
+ span.current-page.button {
+ background-color: #ddd;
+ }
+ .filter-group {
+ width: 23% !important;
+ }
+ .nav-tab-wrapper { margin: 20px 0; }
+ .nav-tab { 
+ text-decoration: none; 
+ padding: 10px 15px; 
+ margin: 0 5px 0 0; 
+ border: 1px solid #ccd0d4;
+ border-bottom: none;
+ background: #f0f0f0;
+ }
+ .nav-tab-active { 
+ background: #0073aa; 
+ color: white; 
+ border-bottom: 1px solid #0073aa;
+ }
+ .order-status-badge { 
+ padding: 6px 12px; 
+ border-radius: 4px; 
+ font-size: 12px; 
+ font-weight: bold;
+ display: inline-block;
+ text-align: center;
+ min-width: 80px;
+ }
+ .status-partial { background: #777; color: #fff; }
+ .status-pending { background: #ffb900; color: #000; }
+ .status-processing { background: #00a0d2; color: #fff; }
+ .status-on-hold { background: #cc1818; color: #fff; }
+ .status-completed { background: #46b450; color: #fff; }
+ .status-cancelled { background: #aaa; color: #fff; }
+ .status-refunded { background: #aaa; color: #fff; }
+ .status-failed { background: #cc1818; color: #fff; }
+ .sequence-badge-small {
+ display: inline-block;
+ width: 25px;
+ height: 25px;
+ background: #0073aa;
+ color: white;
+ text-align: center;
+ line-height: 25px;
+ border-radius: 50%;
+ font-weight: bold;
+ font-size: 12px;
+ }
+ .moderator-inactive-badge {
+ font-size: 10px;
+ color: #cc1818;
+ font-weight: bold;
+ }
+ .order-products {
+ max-height: 80px;
+ overflow-y: auto;
+ }
+ .product-name {
+ font-size: 12px;
+ margin-bottom: 3px;
+ line-height: 1.3;
+ }
+ .more-products {
+ font-size: 11px;
+ color: #666;
+ font-style: italic;
+ }
+ .order-actions {
+ display: flex;
+ flex-direction: column;
+ gap: 5px;
+ }
+ .button-small {
+ padding: 4px 8px;
+ font-size: 12px;
+ line-height: 1.5;
+ text-align: center;
+ }
+ .status-count-badge {
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ padding: 8px 12px;
+ border-radius: 20px;
+ font-size: 12px;
+ font-weight: bold;
+ }
+ .status-count-badge.status-pending { background: #fff8e5; color: #8a6d3b; }
+ .status-count-badge.status-partial { background: #777; color: #fff; }
+ .status-count-badge.status-processing { background: #e7f3ff; color: #0073aa; }
+ .status-count-badge.status-on-hold { background: #ffe5e5; color: #cc1818; }
+ .status-count-badge.status-completed { background: #e5f7e5; color: #46b450; }
+ .status-count-badge.status-cancelled { background: #f0f0f0; color: #666; }
+ .status-count-badge.status-refunded { background: #f0f0f0; color: #666; }
+ .status-count-badge.status-failed { background: #ffe5e5; color: #cc1818; }
+ .status-count {
+ background: white;
+ padding: 2px 8px;
+ border-radius: 10px;
+ font-weight: bold;
+ color: #777;
+ }
+ .modal-backdrop {
+ position: fixed;
+ top: 0;
+ left: 0;
+ right: 0;
+ bottom: 0;
+ background: rgba(0,0,0,0.5);
+ z-index: 9999;
+ }
+ </style>
+ 
+ <script>
+ jQuery(document).ready(function($) {
+ // View order details
+ $('.view-order-details').click(function() {
+ var orderId = $(this).data('order-id');
+ viewOrderDetails(orderId);
+ });
+ 
+ // Close modal with ESC key
+ $(document).keyup(function(e) {
+ if (e.keyCode === 27) {
+ closeOrderModal();
+ }
+ });
+ });
+ 
+ function viewOrderDetails(orderId) {
+ // Simple loading message
+ document.getElementById("modal-order-id").textContent = orderId;
+ document.getElementById("order-details-content").innerHTML = "<div style='text-align: center; padding: 40px;'><div class='spinner is-active' style='float: none;'></div><p>Loading order details...</p></div>";
+ 
+ // Show modal and backdrop
+ document.body.appendChild(document.createElement("div")).className = "modal-backdrop";
+ document.getElementById("order-details-modal").style.display = "block";
+ 
+ // Load details via AJAX
+ jQuery.ajax({
+ url: "<?php echo admin_url('admin-ajax.php'); ?>",
+ type: "POST",
+ data: {
+ action: "get_moderator_order_details_simple",
+ order_id: orderId,
+ nonce: "<?php echo wp_create_nonce('moderator_order_details'); ?>"
+ },
+ success: function(response) {
+ if (response.success) {
+ jQuery("#order-details-content").html(response.data);
+ } else {
+ jQuery("#order-details-content").html("<div style='text-align: center; padding: 40px; color: #cc1818;'><p>Error loading order details.</p></div>");
+ }
+ },
+ error: function() {
+ jQuery("#order-details-content").html("<div style='text-align: center; padding: 40px; color: #cc1818;'><p>Error loading order details.</p></div>");
+ }
+ });
+ }
+ 
+ function closeOrderModal() {
+ document.getElementById("order-details-modal").style.display = "none";
+ var backdrops = document.getElementsByClassName("modal-backdrop");
+ while (backdrops.length > 0) {
+ backdrops[0].remove();
+ }
+ }
+ 
+ // Close modal when clicking backdrop
+ document.addEventListener("click", function(e) {
+ if (e.target.classList.contains("modal-backdrop")) {
+ closeOrderModal();
+ }
+ });
+ 
+ // Export functions (placeholder)
+ function exportAssignments(format) {
+ alert('Export to ' + format.toUpperCase() + ' functionality would be implemented here.');
+ // In a real implementation, this would make an AJAX call to generate and download the file
+ }
+ 
+ function printAssignments() {
+ window.print();
+ }
+ </script>
+ <?php
+}
+
+
+// Filter orders for users - they only see their own orders
+add_action('pre_get_posts', 'filter_orders_for_moderators_by_assignment');
+
+function filter_orders_for_moderators_by_assignment($query) {
+ if (!is_admin() || !$query->is_main_query()) return;
+ 
+ $current_user = wp_get_current_user();
+ 
+ // Check if user has any assigned role
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role && 
+ isset($query->query['post_type']) && 
+ $query->query['post_type'] === 'shop_order') {
+ 
+ $meta_query = array(
+ array(
+ 'key' => '_assigned_moderator_id',
+ 'value' => $current_user->ID,
+ 'compare' => '='
+ )
+ );
+ 
+ $query->set('meta_query', $meta_query);
+ }
+}
+
+// Display moderator sequence and status in orders list
+add_filter('manage_edit-shop_order_columns', 'add_moderator_sequence_column');
+
+function add_moderator_sequence_column($columns) {
+ $new_columns = array();
+ 
+ foreach ($columns as $key => $column) {
+ $new_columns[$key] = $column;
+ if ($key === 'order_status') {
+ $new_columns['assigned_moderator_seq'] = 'Moderator #';
+ $new_columns['moderator_status'] = 'Mod Status';
+ }
+ }
+ 
+ return $new_columns;
+}
+
+add_action('manage_shop_order_posts_custom_column', 'show_moderator_sequence_in_column', 10, 2);
+
+function show_moderator_sequence_in_column($column, $post_id) {
+ if ($column === 'assigned_moderator_seq') {
+ $sequence = get_post_meta($post_id, '_assigned_moderator_sequence', true);
+ if ($sequence) {
+ echo '<strong>Moderator ' . esc_html($sequence) . '</strong>';
+ } else {
+ echo '<span style="color:#ccc;">Not assigned</span>';
+ }
+ }
+ 
+ if ($column === 'moderator_status') {
+ $moderator_id = get_post_meta($post_id, '_assigned_moderator_id', true);
+ if ($moderator_id) {
+ $status = get_user_meta($moderator_id, 'moderator_status', true) ?: 'active';
+ if ($status === 'active') {
+ echo '<span style="color:green; font-weight:bold;"> Active</span>';
+ } else {
+ echo '<span style="color:red; font-weight:bold;"> Inactive</span>';
+ }
+ } else {
+ echo '<span style="color:#ccc;">N/A</span>';
+ }
+ }
+}
+
+// Initialize default status for existing moderators
+add_action('admin_init', 'initialize_moderator_status');
+
+function initialize_moderator_status() {
+ // Get assigned roles
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Get users with assigned roles
+ $users = get_users(array('role__in' => $assigned_roles));
+ 
+ foreach ($users as $user) {
+ $current_status = get_user_meta($user->ID, 'moderator_status', true);
+ if (empty($current_status)) {
+ update_user_meta($user->ID, 'moderator_status', 'active');
+ }
+ }
+}
+
+
+
+// Simple user orders page - WITH FILTERS
+add_action('admin_menu', 'simple_moderator_orders_menu');
+
+// Simple user orders page - WITH PROPER ACCESS FIX
+function simple_moderator_orders_menu() {
+ $current_user = wp_get_current_user();
+ 
+ // Check if user has any assigned role
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role) {
+ add_menu_page(
+ 'My Orders',
+ 'My Orders', 
+ 'read',
+ 'moderator-simple-orders',
+ 'simple_moderator_orders_page',
+ 'dashicons-clipboard',
+ 25
+ );
+ }
+}
+
+// Fix admin bar for moderators
+function fix_moderator_admin_bar($wp_admin_bar) {
+ $current_user = wp_get_current_user();
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role && !current_user_can('manage_options')) {
+ // Ensure moderators can see the admin bar
+ if (!current_user_can('edit_posts')) {
+ show_admin_bar(true);
+ }
+ 
+ // Add our custom "My Orders" link
+ $wp_admin_bar->add_node(array(
+ 'id' => 'moderator-orders',
+            'title' => 'My Orders',
+ 'href' => admin_url('admin.php?page=moderator-simple-orders'),
+ 'parent' => 'site-name'
+ ));
+ }
+}
+add_action('admin_bar_menu', 'fix_moderator_admin_bar', 1000);
+
+// Hide WordPress admin bar for assigned order-management users.
+add_filter('show_admin_bar', 'aoam_hide_admin_bar_for_assigned_roles', 99);
+function aoam_hide_admin_bar_for_assigned_roles($show) {
+ $current_user = wp_get_current_user();
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect((array) $current_user->roles, $assigned_roles));
+ 
+ if ($user_has_role && !current_user_can('manage_options')) {
+ return false;
+ }
+ 
+ return $show;
+}
+
+function simple_moderator_orders_page() {
+ $current_user = wp_get_current_user();
+ $user_id = $current_user->ID;
+ 
+ // CHANGED: Check if user has any assigned role
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
+ 
+ if (!$user_has_role) {
+ wp_die('You do not have permission to access this page.');
+ }
+ 
+ // Handle order status update
+ if (isset($_POST['update_order_status']) && wp_verify_nonce($_POST['moderator_nonce'], 'update_order_status')) {
+ $order_id = intval($_POST['order_id']);
+ $new_status = sanitize_text_field($_POST['order_status']);
+ 
+ if ($order_id && $new_status) {
+ $order = wc_get_order($order_id);
+ 
+ // Verify this order belongs to the current user
+ $assigned_user_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ 
+ if ($order && $assigned_user_id == $user_id) {
+ $old_status = $order->get_status();
+ $order->update_status($new_status);
+ 
+ // Add order note
+ $order_note = sprintf(
+ 'Order status changed from %s to %s by user: %s',
+ $old_status,
+ $new_status,
+ $current_user->display_name
+ );
+ 
+ $order->add_order_note($order_note);
+ 
+ ?>
+ <div class="notice notice-success">
+ <p> Order #<?php echo $order_id; ?> status updated to <?php echo ucfirst($new_status); ?> successfully!</p>
+ </div>
+ <?php
+ } else {
+ ?>
+ <div class="notice notice-error">
+ <p> You are not authorized to update this order or order not found.</p>
+ </div>
+ <?php
+ }
+ }
+ }
+ 
+ // Get filters from URL
+ $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : 'all';
+ $date_filter = isset($_GET['date_filter']) ? sanitize_text_field($_GET['date_filter']) : 'all';
+ $phone_search = isset($_GET['phone_search']) ? sanitize_text_field($_GET['phone_search']) : '';
+ $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+ $per_page = 50;
+ 
+ ?>
+ 
+ <div class="wrap">
+ <!-- Header -->
+ <div class="moderator-profile" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #ccd0d4;">
+ <div>
+ <h1 style="margin: 0;">My Orders - <?php echo $current_user->display_name; ?> 
+ <?php $moderator_status = get_user_meta($current_user->ID, 'moderator_status', true); ?>
+ <?php if ($moderator_status == 'active'): ?>
+ <span class="moderator-active-badge">(Active)</span>
+ <?php else: ?>
+ <span class="moderator-inactive-badge">(Inactive)</span>
+ <?php endif; ?>
+ </h1>
+ <p style="margin: 5px 0 0 0; color: #666;">
+ <strong>Email:</strong> <?php echo $current_user->user_email; ?> | 
+ <strong>Role:</strong> <?php echo implode(', ', $current_user->roles); ?>
+ </p>
+ </div>
+ <div class="moderator-menu">
+ <button type="button" class="moderator-menu-toggle" aria-label="Open user menu" onclick="this.parentNode.classList.toggle('is-open')">
+ <span></span><span></span><span></span>
+ </button>
+ <div class="moderator-menu-panel">
+ <a href="<?php echo esc_url(admin_url('profile.php')); ?>" class="button">Profile</a>
+ <a href="<?php echo esc_url(wp_logout_url()); ?>" class="button moderator-logout-btn">Logout</a>
+ </div>
+ </div>
+ </div>
+
+ <?php
+ // Get orders assigned to this user
+ global $wpdb;
+ 
+ // Get WordPress timezone
+ $timezone = wp_timezone();
+ $today_date = current_time('Y-m-d'); // Use WordPress current time
+ 
+ // Base query for order IDs - SIMPLIFIED
+ $query = $wpdb->prepare(
+ "SELECT DISTINCT pm.post_id 
+ FROM {$wpdb->postmeta} pm 
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d",
+ $user_id
+ );
+
+ $query .= " ORDER BY pm.meta_id DESC";
+ 
+ $order_ids = $wpdb->get_col($query);
+ 
+ // Filter by status and prepare orders array
+ $all_filtered_orders = array();
+ $status_counts = array(
+ 'all' => 0,
+ 'pending' => 0,
+ 'partial' => 0,
+ 'processing' => 0,
+ 'on-hold' => 0,
+ 'completed' => 0,
+ 'cancelled' => 0,
+ 'refunded' => 0,
+ 'failed' => 0
+ );
+ 
+ // Count today's orders
+ $today_orders_count = 0;
+ $today_orders_by_status = array(
+ 'pending' => 0,
+ 'partial' => 0,
+ 'processing' => 0,
+ 'on-hold' => 0,
+ 'completed' => 0,
+ 'cancelled' => 0,
+ 'refunded' => 0,
+ 'failed' => 0
+ );
+ 
+ if (!empty($order_ids)) {
+ foreach ($order_ids as $order_id) {
+ try {
+ $order = wc_get_order($order_id);
+ 
+ if ($order && is_a($order, 'WC_Order')) {
+ $order_date = aoam_format_order_local_date($order, 'Y-m-d');
+ $order_status = $order->get_status();
+ $order_phone = $order->get_billing_phone();
+ 
+ // Check phone number match if searching
+ $phone_match = true;
+ if (!empty($phone_search)) {
+ // Clean both phone numbers for comparison (remove non-numeric)
+ $search_clean = preg_replace('/[^0-9]/', '', $phone_search);
+ $order_phone_clean = preg_replace('/[^0-9]/', '', $order_phone);
+ 
+ // Check if search appears in order phone (partial match)
+ $phone_match = !empty($order_phone_clean) && 
+ (stripos($order_phone, $phone_search) !== false || 
+ stripos($order_phone_clean, $search_clean) !== false);
+ }
+ 
+ // Count today's orders
+ if ($order_date === $today_date) {
+ $today_orders_count++;
+ if (isset($today_orders_by_status[$order_status])) {
+ $today_orders_by_status[$order_status]++;
+ }
+ }
+ 
+ $status_counts['all']++;
+ if (isset($status_counts[$order_status])) {
+ $status_counts[$order_status]++;
+ }
+ 
+ // Apply all filters: status, date, and phone
+ $status_match = ($status_filter === 'all' || $order_status === $status_filter);
+ $date_match = true;
+ 
+ if ($date_filter === 'today') {
+ $date_match = ($order_date === $today_date);
+ }
+ 
+ if ($status_match && $date_match && $phone_match) {
+ $all_filtered_orders[] = $order;
+ }
+ }
+ } catch (Exception $e) {
+ continue;
+ }
+ }
+ }
+ 
+ // Pagination calculations
+ $total_orders = count($all_filtered_orders);
+ $total_pages = ceil($total_orders / $per_page);
+ $offset = ($paged - 1) * $per_page;
+ $orders = array_slice($all_filtered_orders, $offset, $per_page);
+ ?>
+ 
+ <!-- Date and Status filters -->
+ <div class="order-filters-container">
+ <form method="get" class="orders-filter-toolbar">
+ <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? 'moderator-simple-orders'); ?>">
+ <input type="hidden" name="phone_search" value="<?php echo esc_attr($phone_search); ?>">
+ <input type="hidden" name="paged" value="1">
+ <div class="orders-filter-field">
+ <label for="date_filter_select">Date</label>
+ <select id="date_filter_select" name="date_filter" onchange="this.form.submit()">
+ <option value="all" <?php selected($date_filter, 'all'); ?>>All Orders (<?php echo esc_html($status_counts['all']); ?>)</option>
+ <option value="today" <?php selected($date_filter, 'today'); ?>>Today's Orders (<?php echo esc_html($today_orders_count); ?>)</option>
+ </select>
+ </div>
+ <div class="orders-filter-field orders-filter-field-right">
+ <label for="status_filter_select">Status</label>
+ <select id="status_filter_select" name="status" onchange="this.form.submit()">
+ <option value="all" <?php selected($status_filter, 'all'); ?>>All (<?php echo esc_html($date_filter === 'today' ? $total_orders : $status_counts['all']); ?>)</option>
+ <option value="pending" <?php selected($status_filter, 'pending'); ?>>Pending (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['pending'] : $status_counts['pending']); ?>)</option>
+ <option value="partial" <?php selected($status_filter, 'partial'); ?>>Partial (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['partial'] : $status_counts['partial']); ?>)</option>
+ <option value="processing" <?php selected($status_filter, 'processing'); ?>>Processing (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['processing'] : $status_counts['processing']); ?>)</option>
+ <option value="on-hold" <?php selected($status_filter, 'on-hold'); ?>>On Hold (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['on-hold'] : $status_counts['on-hold']); ?>)</option>
+ <option value="completed" <?php selected($status_filter, 'completed'); ?>>Completed (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['completed'] : $status_counts['completed']); ?>)</option>
+ <option value="cancelled" <?php selected($status_filter, 'cancelled'); ?>>Cancelled (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['cancelled'] : $status_counts['cancelled']); ?>)</option>
+ </select>
+ </div>
+ </form>
+ <?php if ($date_filter === 'today'): ?>
+ <div class="orders-filter-note">
+ <strong>Showing orders from:</strong> <?php echo esc_html(date_i18n('F j, Y')); ?>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <!-- Phone Number Search Box -->
+ <div class="phone-search-section" style="margin-bottom: 30px; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+ <h3 style="margin-top: 0; margin-bottom: 15px;"> Search Orders by Phone Number</h3>
+ 
+ <form method="get" action="" class="phone-search-form">
+ <!-- Keep existing filters in URL -->
+ <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? ''); ?>">
+ <input type="hidden" name="status" value="<?php echo esc_attr($status_filter); ?>">
+ <input type="hidden" name="date_filter" value="<?php echo esc_attr($date_filter); ?>">
+ 
+ <input type="text" 
+ name="phone_search" 
+ id="phone_search_main" 
+ placeholder="Enter customer phone number (e.g., +1234567890 or 123-456-7890)" 
+ value="<?php echo esc_attr($phone_search); ?>">
+ 
+ <button type="submit" 
+ class="button button-primary phone-search-button">
+ Search
+ </button>
+ 
+ <?php if (!empty($phone_search)): ?>
+ <a href="<?php echo remove_query_arg('phone_search'); ?>" 
+ class="button" 
+ style="white-space: nowrap; padding: 10px 20px; background: #f0f0f0; border-color: #ccc;">
+ Clear Search
+ </a>
+ <?php endif; ?>
+ </form>
+ 
+ <?php if (!empty($phone_search)): ?>
+ <div style="margin-top: 10px; padding: 12px; background: #e5f7e5; border-radius: 4px; color: #46b450; border-left: 4px solid #46b450;">
+ <strong> Showing orders for phone number:</strong> <?php echo esc_html($phone_search); ?>
+ <span style="float: right;">
+ <a href="<?php echo remove_query_arg('phone_search'); ?>" style="color: #0073aa; text-decoration: none; font-weight: bold;">
+ Clear filter
+ </a>
+ </span>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <?php if (!empty($phone_search)) : ?>
+ <div class="search-stats" style="margin-bottom: 20px; padding: 15px; background: #f0f6ff; border-radius: 6px; border: 1px solid #c3d9ff;">
+ <h4 style="margin-top: 0; color: #0073aa;"> Search Results</h4>
+ <p style="margin: 5px 0;">
+ <strong>Searching for:</strong> <code style="background: white; padding: 2px 6px; border-radius: 3px;"><?php echo esc_html($phone_search); ?></code>
+ <strong>Filtered by:</strong> 
+ <?php if ($date_filter === 'today'): ?>
+ <span style="background: #e7f3ff; padding: 2px 8px; border-radius: 3px;">Today's orders</span>
+ <?php else: ?>
+ <span style="background: #f0f0f0; padding: 2px 8px; border-radius: 3px;">All dates</span>
+ <?php endif; ?>
+ 
+ <?php if ($status_filter !== 'all'): ?>
+ <span style="background: #e7f3ff; padding: 2px 8px; border-radius: 3px;"><?php echo ucfirst($status_filter); ?> status</span>
+ <?php endif; ?>
+ </p>
+ </div>
+ <?php endif; ?>
+ 
+ <?php if (empty($order_ids)) : ?>
+ <div class="notice notice-error">
+ <h3> No Orders Found</h3>
+ <p>You don't have any orders assigned to you yet.</p>
+ </div>
+ <?php elseif (empty($all_filtered_orders)) : ?>
+ <div class="notice notice-info">
+ <p>
+ <?php if (!empty($phone_search)): ?>
+ <strong> No orders found for phone number:</strong> <?php echo esc_html($phone_search); ?>
+ <?php if ($date_filter === 'today' && $status_filter !== 'all'): ?>
+ with status "<?php echo $status_filter; ?>" for today.
+ <?php elseif ($date_filter === 'today'): ?>
+ for today.
+ <?php elseif ($status_filter !== 'all'): ?>
+ with status "<?php echo $status_filter; ?>".
+ <?php else: ?>
+ .
+ <?php endif; ?>
+ <?php elseif ($date_filter === 'today' && $status_filter !== 'all'): ?>
+ No <?php echo $status_filter; ?> orders found for today (<?php echo date_i18n('F j, Y'); ?>).
+ <?php elseif ($date_filter === 'today'): ?>
+ No orders found for today (<?php echo date_i18n('F j, Y'); ?>).
+ <?php elseif ($status_filter !== 'all'): ?>
+ No orders found with status: <?php echo $status_filter; ?>.
+ <?php else: ?>
+ You have <?php echo $status_counts['all']; ?> total orders, but none match current filters.
+ <?php endif; ?>
+ </p>
+ <p>
+ <a href="<?php echo remove_query_arg(array('status', 'date_filter', 'paged', 'phone_search')); ?>" class="button button-primary">Show All Orders</a>
+ <?php if (!empty($phone_search)): ?>
+ <a href="<?php echo remove_query_arg('phone_search'); ?>" class="button" style="margin-left: 10px;">Clear Phone Search</a>
+ <?php endif; ?>
+ </p>
+ </div>
+ <?php else : ?>
+ <!-- Display orders count with filter info -->
+ <div class="card" style="background: #fff; padding: 15px; margin: 10px 0; border-left: 4px solid #46b450; max-width: 100%;">
+ <h3>
+ <?php 
+ $filter_text = '';
+ if ($date_filter === 'today') {
+ $filter_text = 'Today\'s ';
+ }
+ 
+ $status_text = ($status_filter === 'all') ? 'All' : ucfirst($status_filter);
+ 
+ if (!empty($phone_search)) {
+ echo ' ' . $filter_text . $status_text . ' Orders for Phone: ' . esc_html($phone_search) . ' - ' . $total_orders . ' found';
+ } else {
+ echo ' ' . $filter_text . $status_text . ' Orders: ' . $total_orders;
+ }
+ 
+ if ($date_filter === 'today') {
+ echo ' (From: ' . date_i18n('F j, Y') . ')';
+ }
+ ?>
+ </h3>
+ 
+ <!-- Quick Stats -->
+ <div class="mobile-col3" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 15px;">
+ <div style="text-align: center; padding: 10px; background: #f0f6ff; border-radius: 6px;">
+ <div style="font-size: 18px; font-weight: bold; color: #0073aa;"><?php echo count($orders); ?></div>
+ <div style="font-size: 12px;">Showing</div>
+ </div>
+ <div style="text-align: center; padding: 10px; background: #f0f6ff; border-radius: 6px;">
+ <div style="font-size: 18px; font-weight: bold; color: #46b450;"><?php echo $today_orders_count; ?></div>
+ <div style="font-size: 12px;">Today's Total</div>
+ </div>
+ <div style="text-align: center; padding: 10px; background: #f0f6ff; border-radius: 6px;">
+ <div style="font-size: 18px; font-weight: bold; color: #ffb900;"><?php echo $status_counts['all']; ?></div>
+ <div style="font-size: 12px;">All Time Total</div>
+ </div>
+ </div>
+ 
+ <?php if (!empty($phone_search)): ?>
+ <div style="margin-top: 15px; padding: 10px; background: #f8fff8; border-radius: 6px; border: 1px solid #46b450;">
+ <h4 style="margin-top: 0;"> Phone Search Active</h4>
+ <p style="margin: 5px 0;">
+ <strong>Searching for:</strong> <code style="background: white; padding: 2px 8px; border-radius: 3px; font-size: 14px;"><?php echo esc_html($phone_search); ?></code>
+ <a href="<?php echo remove_query_arg('phone_search'); ?>" style="margin-left: 10px; color: #0073aa; text-decoration: none;">
+ (Clear search)
+ </a>
+ </p>
+ <p style="margin: 5px 0; font-size: 13px; color: #666;">
+ <small>Showing orders where phone number contains the search term (partial match).</small>
+ </p>
+ </div>
+ <?php endif; ?>
+ 
+ <!-- Today's Breakdown (if today filter is active) -->
+ <?php if ($date_filter === 'today'): ?>
+ <div style="margin-top: 15px; padding: 10px; background: #f8fff8; border-radius: 6px; border: 1px solid #ccd0d4;">
+ <h4 style="margin-top: 0;"> Today's Order Breakdown:</h4>
+ <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+ <?php foreach ($today_orders_by_status as $status => $count): 
+ if ($count > 0): 
+ $status_label = wc_get_order_status_name($status);
+ ?>
+ <div style="text-align: center; padding: 8px 12px; background: white; border-radius: 4px; border: 1px solid #ddd; min-width: 100px;">
+ <div style="font-size: 16px; font-weight: bold; color: #0073aa;"><?php echo $count; ?></div>
+ <div style="font-size: 11px; color: #666;"><?php echo $status_label; ?></div>
+ </div>
+ <?php endif; endforeach; ?>
+ </div>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <!-- Orders Table Container -->
+ <div id="orders-table-container">
+ <!-- Display orders table -->
+ <div class="table-wrapper">
+ <table class="fixed-table">
+ <thead>
+ <tr>
+ <th>Order #</th>
+ <th>Date & Time</th>
+ <th>Customer</th>
+ <th>Items</th>
+ <th>Total</th>
+ <th>Status</th>
+ <th>Actions</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php foreach ($orders as $order) : 
+ $order_status = $order->get_status();
+ $status_class = 'status-' . $order_status;
+ $status_label = wc_get_order_status_name($order_status);
+ $order_date = $order->get_date_created();
+ $order_date_formatted = aoam_format_order_local_date($order, 'Y-m-d');
+ $is_today = $order_date_formatted === $today_date;
+ 
+ // Get order items
+ $items = $order->get_items();
+ $product_names = array();
+ $item_count = 0;
+ 
+ foreach ($items as $item) {
+ $product_names[] = $item->get_name();
+ $item_count += $item->get_quantity();
+ }
+ ?>
+ <tr>
+ <td>
+ <strong>#<?php echo $order->get_id(); ?></strong>
+ <?php if ($is_today): ?>
+ <span style="color: #46b450; font-size: 10px; margin-left: 5px;"></span>
+ <?php endif; ?>
+ </td>
+ <td>
+ <?php echo esc_html(aoam_format_order_local_date($order, 'M j')); ?><br>
+ <small style="color: #666;"><?php echo esc_html(aoam_format_order_local_date($order, 'g:i A')); ?></small>
+ <?php if ($is_today): ?>
+ <br><small style="color: #46b450; font-weight: bold;">Today</small>
+ <?php endif; ?>
+ </td>
+ <td>
+ <?php echo $order->get_formatted_billing_full_name(); ?>
+ <?php if (!empty($order->get_billing_email())) {
+ echo '<br><small>'.$order->get_billing_email().'</small>';
+ } ?>
+ 
+ <br><small><?php echo $order->get_billing_phone(); ?></small>
+ </td>
+ <td> 
+ <div class="order-products">
+ <?php 
+ $display_count = 0;
+ foreach ($product_names as $product_name) {
+ if ($display_count >= 2) break;
+ echo '<div class="product-name" style="display:inline">' . esc_html($product_name) . '</div>';
+ $display_count++;
+ }
+ if (count($product_names) > 2): ?>
+ <div class="more-products" style="display:inline">
+ + <?php echo count($product_names) - 2; ?> more products
+ </div>
+ <?php endif; ?>
+ (<?php echo $item_count; ?> items)
+ </div>
+ </td>
+ <td><?php echo $order->get_formatted_order_total(); ?></td>
+ <td>
+ <span class="order-status-badge <?php echo $status_class; ?>">
+ <?php echo $status_label; ?>
+ </span>
+ </td>
+ <td class="order-actions">
+ <!-- View Details Button -->
+ <button type="button" class="button button-small" onclick="viewOrderDetails(<?php echo $order->get_id(); ?>)">
+ View Details
+ </button>
+ 
+ <!-- Status Update Form -->
+ <form method="post" style="display: inline-block; margin-left: 5px;">
+ <?php wp_nonce_field('update_order_status', 'moderator_nonce'); ?>
+ <input type="hidden" name="order_id" value="<?php echo $order->get_id(); ?>">
+ <input type="hidden" name="update_order_status" value="1">
+ <select name="order_status" onchange="this.form.submit()" style="font-size: 12px; padding: 4px 8px;">
+ <option value="">Change Status</option>
+ <option value="pending" <?php selected($order_status, 'pending'); ?>>Pending</option>
+ <option value="partial" <?php selected($order_status, 'partial'); ?>>Partial</option>
+ <option value="processing" <?php selected($order_status, 'processing'); ?>>Processing</option>
+ <option value="on-hold" <?php selected($order_status, 'on-hold'); ?>>On Hold</option>
+ <option value="completed" <?php selected($order_status, 'completed'); ?>>Completed</option>
+ <option value="cancelled" <?php selected($order_status, 'cancelled'); ?>>Cancelled</option>
+ </select>
+ </form>
+ </td>
+ </tr>
+ <?php endforeach; ?>
+ </tbody>
+ </table>
+ </div>
+ 
+ <div class="mobile-order-cards">
+ <?php foreach ($orders as $order) :
+ $order_status = $order->get_status();
+ $status_class = 'status-' . $order_status;
+ $status_label = wc_get_order_status_name($order_status);
+ $items = $order->get_items();
+ $item_count = 0;
+ $product_names = array();
+ foreach ($items as $item) {
+ $item_count += $item->get_quantity();
+ $product_names[] = $item->get_name();
+ }
+ $customer_name = $order->get_formatted_billing_full_name();
+ $customer_phone = $order->get_billing_phone();
+ if (empty($customer_phone)) {
+ $customer_phone = $order->get_shipping_phone();
+ }
+ $order_date_timestamp = aoam_get_order_local_timestamp($order);
+ $time_ago = $order_date_timestamp ? human_time_diff($order_date_timestamp, current_time('timestamp')) . ' ago' : '';
+ ?>
+ <article class="mobile-order-card">
+ <div class="mobile-card-top">
+ <div class="mobile-card-badges">
+ <span class="mobile-status-pill <?php echo esc_attr($status_class); ?>"><?php echo esc_html($status_label); ?></span>
+ <span class="mobile-item-pill"><span class="dashicons dashicons-products"></span><?php echo esc_html($item_count); ?> items</span>
+ </div>
+ <div class="mobile-order-meta">
+ <span class="mobile-order-number">#<?php echo esc_html($order->get_id()); ?></span>
+ <button type="button" class="mobile-view-link" onclick="viewOrderDetails(<?php echo esc_attr($order->get_id()); ?>)">
+ <span class="dashicons dashicons-visibility"></span>
+ View
+ </button>
+ </div>
+ </div>
+
+ <div class="mobile-card-body">
+ <div class="mobile-customer-block">
+ <h3><?php echo esc_html($customer_name ?: 'Guest Customer'); ?></h3>
+ <p><?php echo esc_html(!empty($product_names) ? implode(', ', array_slice($product_names, 0, 2)) : 'No product name'); ?></p>
+ </div>
+ <div class="mobile-contact-block">
+ <?php if ($customer_phone): ?>
+ <a class="mobile-phone" href="tel:<?php echo esc_attr($customer_phone); ?>"><span class="dashicons dashicons-phone"></span><?php echo esc_html($customer_phone); ?></a>
+ <?php else: ?>
+ <span class="mobile-phone mobile-phone-empty"><span class="dashicons dashicons-phone"></span>No phone</span>
+ <?php endif; ?>
+ <div class="mobile-total"><?php echo wp_kses_post($order->get_formatted_order_total()); ?></div>
+ </div>
+ </div>
+
+ <div class="mobile-card-footer">
+ <div class="mobile-owner-time">
+ <strong><?php echo esc_html($current_user->display_name); ?></strong>
+ <?php if ($time_ago): ?><span><?php echo esc_html($time_ago); ?></span><?php endif; ?>
+ </div>
+ <form method="post" class="mobile-status-form">
+ <?php wp_nonce_field('update_order_status', 'moderator_nonce'); ?>
+ <input type="hidden" name="order_id" value="<?php echo esc_attr($order->get_id()); ?>">
+ <input type="hidden" name="update_order_status" value="1">
+ <select name="order_status" onchange="this.form.submit()">
+ <option value="pending" <?php selected($order_status, 'pending'); ?>>Pending</option>
+ <option value="partial" <?php selected($order_status, 'partial'); ?>>Partial</option>
+ <option value="processing" <?php selected($order_status, 'processing'); ?>>Processing</option>
+ <option value="on-hold" <?php selected($order_status, 'on-hold'); ?>>On Hold</option>
+ <option value="completed" <?php selected($order_status, 'completed'); ?>>Completed</option>
+ <option value="cancelled" <?php selected($order_status, 'cancelled'); ?>>Cancelled</option>
+ </select>
+ </form>
+ </div>
+ </article>
+ <?php endforeach; ?>
+ </div>
+ <!-- Pagination -->
+ <?php if ($total_pages > 1): ?>
+ <div class="tablenav">
+ <div class="tablenav-pages">
+ <span class="displaying-num">
+ <?php echo sprintf(
+ 'Showing %d-%d of %d orders',
+ $offset + 1,
+ min($offset + $per_page, $total_orders),
+ $total_orders
+ ); ?>
+ </span>
+ 
+ <span class="pagination-links">
+ <?php
+ $base_url = add_query_arg(array(
+ 'status' => $status_filter,
+ 'date_filter' => $date_filter,
+ 'phone_search' => $phone_search
+ ), remove_query_arg('paged'));
+ 
+ // Previous page
+ if ($paged > 1) {
+ echo '<a class="prev-page button" href="' . add_query_arg('paged', $paged - 1, $base_url) . '">
+ <span class="screen-reader-text">Previous page</span>
+ <span aria-hidden="true"></span>
+ </a> ';
+ }
+ 
+ // Page numbers
+ $range = 2;
+ $start = max(1, $paged - $range);
+ $end = min($total_pages, $paged + $range);
+ 
+ if ($start > 1) {
+ echo '<a class="first-page button" href="' . add_query_arg('paged', 1, $base_url) . '">1</a>';
+ if ($start > 2) echo '<span class="pagination-dots"></span>';
+ }
+ 
+ for ($i = $start; $i <= $end; $i++) {
+ if ($i == $paged) {
+ echo '<span class="current-page button">' . $i . '</span> ';
+ } else {
+ echo '<a class="button" href="' . add_query_arg('paged', $i, $base_url) . '">' . $i . '</a> ';
+ }
+ }
+ 
+ if ($end < $total_pages) {
+ if ($end < $total_pages - 1) echo '<span class="pagination-dots"></span>';
+ echo '<a class="last-page button" href="' . add_query_arg('paged', $total_pages, $base_url) . '">' . $total_pages . '</a>';
+ }
+ 
+ // Next page
+ if ($paged < $total_pages) {
+ echo ' <a class="next-page button" href="' . add_query_arg('paged', $paged + 1, $base_url) . '">
+ <span class="screen-reader-text">Next page</span>
+ <span aria-hidden="true"></span>
+ </a>';
+ }
+ ?>
+ </span>
+ </div>
+ </div>
+ <?php endif; ?>
+ </div>
+ <?php endif; ?>
+ 
+ <!-- Order details modal -->
+ <div id="order-details-modal" class="aoam-order-modal" style="display: none;">
+ <div class="aoam-modal-header">
+ <h3>Order Details - #<span id="modal-order-id"></span></h3>
+ <button type="button" class="aoam-modal-close" onclick="closeOrderModal()" aria-label="Close order details">x</button>
+ </div>
+ <div id="order-details-content"></div>
+ </div>
+ 
+ <style>
+ .mobile-order-cards {
+ display: none;
+ }
+ .mobile-order-card {
+ background: #fff;
+ border: 1px solid #e7edf3;
+ border-radius: 14px;
+ box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+ margin: 14px 0;
+ padding: 16px;
+ }
+ .mobile-card-top,
+ .mobile-card-body,
+ .mobile-card-footer {
+ display: flex;
+ justify-content: space-between;
+ gap: 12px;
+ }
+ .mobile-card-top {
+ align-items: center;
+ margin-bottom: 14px;
+ }
+ .mobile-card-badges {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 8px;
+ min-width: 0;
+ }
+ .mobile-status-pill,
+ .mobile-item-pill {
+ display: inline-flex;
+ align-items: center;
+ gap: 5px;
+ border-radius: 999px;
+ font-size: 13px;
+ line-height: 1;
+ padding: 8px 12px;
+ white-space: nowrap;
+ }
+ .mobile-status-pill {
+ background: #d8f7e8;
+ border: 1px solid #99e4c0;
+ color: #157347;
+ font-weight: 600;
+ }
+ .mobile-status-pill.status-completed {
+ background: #d8f7e8;
+ border-color: #99e4c0;
+ color: #157347;
+ }
+ .mobile-status-pill.status-pending,
+ .mobile-status-pill.status-on-hold,
+ .mobile-status-pill.status-partial {
+ background: #fff3cd;
+ border-color: #ffe08a;
+ color: #8a5a00;
+ }
+ .mobile-status-pill.status-cancelled,
+ .mobile-status-pill.status-failed {
+ background: #fde2e1;
+ border-color: #f5aaa6;
+ color: #a52822;
+ }
+ .mobile-item-pill {
+ background: #f3f5f8;
+ border: 1px solid #e5e9ef;
+ color: #667085;
+ }
+ .mobile-item-pill .dashicons,
+ .mobile-phone .dashicons {
+ width: 16px;
+ height: 16px;
+ font-size: 16px;
+ line-height: 16px;
+ }
+ .mobile-order-meta {
+ display: flex;
+ align-items: center;
+ gap: 12px;
+ color: #6b7280;
+ white-space: nowrap;
+ }
+ .mobile-order-number {
+ font-size: 14px;
+ }
+ .mobile-view-link {
+ align-items: center;
+ background: #f8fafc;
+ border: 1px solid #dbe3ea;
+ border-radius: 999px;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+ color: #334155;
+ cursor: pointer;
+ display: inline-flex;
+ font-size: 15px;
+ font-weight: 600;
+ gap: 5px;
+ line-height: 1;
+ min-height: 34px;
+ padding: 8px 12px;
+ }
+ .mobile-view-link .dashicons {
+ width: 15px;
+ height: 15px;
+ font-size: 15px;
+ line-height: 15px;
+ }
+ .mobile-view-link:hover,
+ .mobile-view-link:focus {
+ background: #eaf4ff;
+ border-color: #91c7f3;
+ color: #0a5f9e;
+ }
+ .mobile-card-body {
+ align-items: flex-start;
+ border-bottom: 1px solid #eef1f4;
+ padding-bottom: 16px;
+ }
+ .mobile-customer-block {
+ min-width: 0;
+ flex: 1;
+ }
+ .mobile-customer-block h3 {
+ color: #1f2937;
+ font-size: 20px;
+ line-height: 1.2;
+ margin: 0 0 12px;
+ word-break: break-word;
+ }
+ .mobile-customer-block p {
+ color: #6b7280;
+ font-size: 14px;
+ line-height: 1.4;
+ margin: 0;
+ }
+ .mobile-contact-block {
+ flex: 0 0 auto;
+ min-width: 132px;
+ text-align: right;
+ }
+ .mobile-phone {
+ align-items: center;
+ color: #22a36f;
+ display: inline-flex;
+ font-size: 16px;
+ gap: 5px;
+ margin-bottom: 18px;
+ text-decoration: none;
+ white-space: nowrap;
+ }
+ .mobile-phone-empty {
+ color: #9ca3af;
+ }
+ .mobile-total {
+ color: #111827;
+ font-size: 24px;
+ font-weight: 800;
+ line-height: 1;
+ white-space: nowrap;
+ }
+ .mobile-card-footer {
+ align-items: center;
+ justify-content: space-between;
+ gap: 12px;
+ padding-top: 14px;
+ }
+ .mobile-owner-time {
+ color: #6b7280;
+ display: flex;
+ align-items: center;
+ flex: 1 1 auto;
+ gap: 10px;
+ min-width: 0;
+ text-align: left;
+ }
+ .mobile-owner-time span {
+ white-space: nowrap;
+ }
+ .mobile-owner-time strong {
+ color: #374151;
+ }
+ .mobile-owner-time span {
+ color: #9ca3af;
+ }
+ .mobile-status-form select {
+ background: #fff;
+ border: 1px solid #dce2e8;
+ border-radius: 10px;
+ box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+ color: #4b5563;
+ font-size: 14px;
+ min-height: 40px;
+ min-width: 152px;
+ padding: 6px 34px 6px 14px;
+ }
+ .mobile-status-form {
+ flex: 0 0 auto;
+ margin: 0;
+ text-align: right;
+ }
+ @media (max-width: 782px) {
+ body.wp-admin {
+ background: #f2f4f7;
+ }
+ .moderator-profile {
+ align-items: flex-start !important;
+ gap: 12px;
+ }
+ .date-filter-section,
+ .phone-search-section,
+ .status-filter-section,
+ .card {
+ border-radius: 12px !important;
+ }
+ #orders-table-container .table-wrapper {
+ display: none;
+ }
+ .mobile-order-cards {
+ display: block;
+ }
+ .mobile-col3 {
+ grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+ }
+ .tablenav .tablenav-pages {
+ float: none;
+ text-align: center;
+ }
+ }
+ @media (max-width: 480px) {
+ .mobile-order-card {
+ border-radius: 12px;
+ padding: 14px;
+ }
+ .mobile-card-body {
+ gap: 10px;
+ }
+ .mobile-contact-block {
+ min-width: 118px;
+ }
+ .mobile-phone {
+ font-size: 14px;
+ }
+ .mobile-total {
+ font-size: 21px;
+ }
+ .mobile-customer-block h3 {
+ font-size: 18px;
+ }
+ .mobile-card-footer {
+ align-items: center;
+ flex-direction: row;
+ }
+ .mobile-status-form select {
+ min-width: 138px;
+ }
+ }
+ .order-products .product-name {
+ white-space: pre-line;
+ }
+ span.moderator-active-badge {
+ color: green;
+ }
+ span.moderator-inactive-badge {
+ color: #DC3232;
+ }
+ 
+ .phone-search-section {
+ background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+ border: 1px solid #dee2e6 !important;
+ }
+ .moderator-menu {
+ margin-left: auto;
+ position: relative;
+ }
+ .moderator-menu-toggle {
+ align-items: center;
+ background: #fff;
+ border: 1px solid #cfd8e3;
+ border-radius: 8px;
+ box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+ cursor: pointer;
+ display: inline-flex;
+ flex-direction: column;
+ gap: 4px;
+ height: 38px;
+ justify-content: center;
+ padding: 0;
+ width: 42px;
+ }
+ .moderator-menu-toggle span {
+ background: #1f2937;
+ border-radius: 999px;
+ display: block;
+ height: 2px;
+ width: 18px;
+ }
+ .moderator-menu-panel {
+ background: #fff;
+ border: 1px solid #dbe3ea;
+ border-radius: 10px;
+ box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+ display: none;
+ gap: 8px;
+ min-width: 150px;
+ padding: 10px;
+ position: absolute;
+ right: 0;
+ top: calc(100% + 8px);
+ z-index: 30;
+ }
+ .moderator-menu.is-open .moderator-menu-panel {
+ display: grid;
+ }
+ .moderator-menu-panel .button {
+ display: block;
+ margin: 0;
+ text-align: center;
+ }
+ .moderator-logout-btn {
+ background: #dc3232 !important;
+ border-color: #dc3232 !important;
+ color: #fff !important;
+ }
+ .phone-search-form {
+ align-items: stretch;
+ display: flex;
+ gap: 10px;
+ margin-bottom: 10px;
+ }
+ #phone_search_main {
+ border: 1px solid #cfd8e3;
+ border-radius: 8px;
+ flex: 1 1 auto;
+ font-size: 14px;
+ min-height: 44px;
+ min-width: 0;
+ padding: 10px 14px;
+ width: auto;
+ }
+ .phone-search-button {
+ border-radius: 8px !important;
+ flex: 0 0 auto;
+ min-height: 44px;
+ min-width: 112px;
+ padding: 0 20px !important;
+ white-space: nowrap;
+ }
+ .orders-filter-toolbar {
+ align-items: end;
+ background: #fff;
+ border: 1px solid #dbe3ea;
+ border-radius: 12px;
+ box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
+ display: grid;
+ gap: 14px;
+ grid-template-columns: 1fr 1fr;
+ margin: 0 0 16px;
+ padding: 16px;
+ }
+ .orders-filter-field {
+ min-width: 0;
+ }
+ .orders-filter-field-right {
+ justify-self: end;
+ width: 100%;
+ }
+ .orders-filter-field label {
+ color: #374151;
+ display: block;
+ font-size: 13px;
+ font-weight: 700;
+ margin-bottom: 7px;
+ }
+ .orders-filter-field select {
+ background: #fff;
+ border: 1px solid #cfd8e3;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+ color: #1f2937;
+ font-size: 14px;
+ min-height: 42px;
+ padding: 8px 34px 8px 12px;
+ width: 100%;
+ }
+ .orders-filter-field select:focus {
+ border-color: #2271b1;
+ box-shadow: 0 0 0 1px #2271b1;
+ outline: none;
+ }
+ .orders-filter-note {
+ background: #eef6ff;
+ border: 1px solid #cfe6ff;
+ border-radius: 8px;
+ color: #1d4f7a;
+ margin: -6px 0 16px;
+ padding: 10px 12px;
+ }
+ 
+ #phone_search_main:focus {
+ border-color: #0073aa !important;
+ box-shadow: 0 0 0 1px #0073aa !important;
+ outline: none;
+ }
+ 
+ @media (max-width: 768px) {
+ .mobile-col3{
+ grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) !important;
+ }
+ .moderator-profile{
+ align-items: flex-start !important;
+ display: flex !important;
+ gap: 12px;
+ }
+ 
+ .phone-search-section {
+ padding: 15px !important;
+ }
+ .orders-filter-toolbar {
+ grid-template-columns: 1fr 1fr;
+ gap: 10px;
+ padding: 12px;
+ }
+ .orders-filter-field select {
+ font-size: 13px;
+ min-height: 40px;
+ padding-left: 10px;
+ }
+ 
+ #phone_search_main {
+ margin-bottom: 0;
+ }
+ .phone-search-form {
+ gap: 8px;
+ }
+ .phone-search-button {
+ min-width: 86px;
+ padding-left: 14px !important;
+ padding-right: 14px !important;
+ }
+ .phone-search-section a.button {
+ width: auto;
+ margin-bottom: 0;
+ }
+ }
+ 
+ .order-status-badge { 
+ padding: 4px 8px; 
+ border-radius: 3px; 
+ font-size: 12px; 
+ font-weight: bold;
+ display: inline-block;
+ }
+ .status-pending { background: #ffb900; color: #000; }
+ .status-partial { background: #777; color: #fff; }
+ .status-processing { background: #00a0d2; color: #fff; }
+ .status-on-hold { background: #cc1818; color: #fff; }
+ .status-completed { background: #46b450; color: #fff; }
+ .status-cancelled { background: #aaa; color: #fff; }
+ .status-refunded { background: #aaa; color: #fff; }
+ .order-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+ .modal-backdrop {
+ position: fixed;
+ top: 0;
+ left: 0;
+ right: 0;
+ bottom: 0;
+ background: rgba(0,0,0,0.5);
+ z-index: 9999;
+ }
+ .order-details-section {
+ margin-bottom: 18px;
+ padding: 18px;
+ background: #fff;
+ border: 1px solid #e7edf3;
+ border-radius: 12px;
+ box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+ }
+ .order-details-section h4 {
+ color: #1f2937;
+ font-size: 15px;
+ font-weight: 700;
+ margin: 0 0 14px;
+ border-bottom: 1px solid #eef1f4;
+ padding-bottom: 10px;
+ }
+ .aoam-order-modal {
+ position: fixed;
+ top: 50%;
+ left: 50%;
+ transform: translate(-50%, -50%);
+ background: #f8fafc;
+ border: 1px solid #d7e6f2;
+ border-radius: 16px;
+ box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+ z-index: 10000;
+ width: min(920px, calc(100vw - 28px));
+ max-height: min(86vh, 920px);
+ overflow-y: auto;
+ padding: 20px;
+ }
+ .aoam-modal-header {
+ align-items: center;
+ background: #fff;
+ border: 1px solid #e7edf3;
+ border-radius: 12px;
+ display: flex;
+ justify-content: space-between;
+ margin-bottom: 18px;
+ padding: 16px 18px;
+ position: sticky;
+ top: 0;
+ z-index: 2;
+ }
+ .aoam-modal-header h3 {
+ color: #111827;
+ font-size: 20px;
+ line-height: 1.2;
+ margin: 0;
+ }
+ .aoam-modal-close {
+ align-items: center;
+ background: #f1f5f9;
+ border: 1px solid #dbe3ea;
+ border-radius: 999px;
+ color: #475569;
+ cursor: pointer;
+ display: inline-flex;
+ font-size: 18px;
+ font-weight: 700;
+ height: 34px;
+ justify-content: center;
+ line-height: 1;
+ width: 34px;
+ }
+ .aoam-modal-close:hover {
+ background: #fee2e2;
+ border-color: #fecaca;
+ color: #991b1b;
+ }
+ .nav-tab-wrapper { margin: 20px 0; }
+ .nav-tab { 
+ text-decoration: none; 
+ padding: 10px 15px; 
+ margin: 0 5px 0 0; 
+ border: 1px solid #ccc;
+ background: #f0f0f0;
+ }
+ .nav-tab-active { 
+ background: #0073aa; 
+ color: white; 
+ border-bottom: 3px solid #0073aa; 
+ }
+ .order-status-filters { 
+ background: white; 
+ padding: 10px; 
+ border: 1px solid #ccd0d4; 
+ margin-bottom: 20px;
+ }
+ .card {
+ background: #fff;
+ padding: 15px;
+ margin: 10px 0;
+ border-left: 4px solid #46b450;
+ border-radius: 4px;
+ box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+ }
+
+ .table-wrapper {
+ width: 100%;
+ overflow-x: auto; 
+ position: relative;
+ }
+
+ /* Basic table design */
+ .fixed-table {
+ border-collapse: collapse;
+ width: auto;
+ min-width: 100%;
+ }
+
+ .fixed-table th,
+ .fixed-table td {
+ border: 1px solid #ccc;
+ padding: 10px;
+ white-space: nowrap;
+ background: #fff;
+ }
+
+ /* --- FIX LAST 2 COLUMNS --- */
+ .fixed-table th:nth-last-child(2),
+ .fixed-table td:nth-last-child(2) {
+ position: sticky !important;
+ right: 30px; /* last column width */
+ z-index: 5;
+ }
+
+ .fixed-table th:last-child,
+ .fixed-table td:last-child {
+ position: sticky !important;
+ right: 0;
+ z-index: 5;
+ }
+ 
+ /* Pagination Styles */
+ .tablenav {
+ margin: 20px 0;
+ padding: 15px;
+ background: white;
+ border: 1px solid #ccd0d4;
+ border-radius: 4px;
+ overflow: hidden;
+ }
+ .tablenav-pages {
+ display: flex;
+ align-items: center;
+ flex-wrap: wrap;
+ gap: 15px;
+ }
+ .displaying-num {
+ margin-right: 15px;
+ font-weight: bold;
+ }
+ .pagination-links {
+ display: flex;
+ gap: 5px;
+ flex-wrap: wrap;
+ }
+ .pagination-links .button {
+ min-width: 32px;
+ height: 32px;
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ padding: 6px 8px !important;
+ }
+ .current-page {
+ background: #0073aa;
+ color: white;
+ border-color: #0073aa;
+ }
+ .pagination-dots {
+ padding: 0 8px;
+ color: #666;
+ }
+ .tablenav-pages .pagination-links .current-page {
+ padding: 6px 6px !important;
+ }
+ </style>
+ 
+ <script>
+ function viewOrderDetails(orderId) {
+ document.getElementById("modal-order-id").textContent = orderId;
+ document.getElementById("order-details-content").innerHTML = "<p>Loading order details...</p>";
+ 
+ document.body.appendChild(document.createElement("div")).className = "modal-backdrop";
+ document.getElementById("order-details-modal").style.display = "block";
+ 
+ jQuery.ajax({
+ url: "<?php echo admin_url('admin-ajax.php'); ?>",
+ type: "POST",
+ data: {
+ action: "get_moderator_order_details_simple",
+ order_id: orderId,
+ nonce: "<?php echo wp_create_nonce('moderator_order_details'); ?>"
+ },
+ success: function(response) {
+ if (response.success) {
+ jQuery("#order-details-content").html(response.data);
+ } else {
+ jQuery("#order-details-content").html("<p>Error loading order details.</p>");
+ }
+ },
+ error: function() {
+ jQuery("#order-details-content").html("<p>Error loading order details.</p>");
+ }
+ });
+ }
+ 
+ function closeOrderModal() {
+ document.getElementById("order-details-modal").style.display = "none";
+ var backdrops = document.getElementsByClassName("modal-backdrop");
+ while (backdrops.length > 0) {
+ backdrops[0].remove();
+ }
+ }
+ 
+ document.addEventListener("click", function(e) {
+ if (e.target.classList.contains("modal-backdrop")) {
+ closeOrderModal();
+ }
+ });
+ 
+ // // Auto-focus on search input when page loads
+ // document.addEventListener('DOMContentLoaded', function() {
+ // var searchInput = document.getElementById('phone_search_main');
+ // if (searchInput && searchInput.value === '') {
+ // searchInput.focus();
+ // }
+ // });
+ </script>
+ </div>
+ <?php
+}
+
+// FIXED VERSION - Handle AJAX order details with proper variable names
+add_action('wp_ajax_get_moderator_order_details_simple', 'get_moderator_order_details_simple_fixed');
+
+function get_moderator_order_details_simple_fixed() {
+ // Check nonce first
+ if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'moderator_order_details')) {
+ wp_send_json_error('Security verification failed');
+ return;
+ }
+ 
+ // Check if order_id is provided
+ if (!isset($_POST['order_id']) || empty($_POST['order_id'])) {
+ wp_send_json_error('Order ID is required');
+ return;
+ }
+ 
+ $order_id = intval($_POST['order_id']);
+ $current_user = wp_get_current_user();
+ 
+ // Get the order
+ $order = wc_get_order($order_id);
+ if (!$order) {
+ wp_send_json_error('Order not found');
+ return;
+ }
+ 
+ // Check permissions - allow admins and assigned moderators
+ $assigned_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $is_admin = current_user_can('manage_options');
+ $is_assigned_moderator = ($assigned_moderator_id == $current_user->ID); // FIXED: using $current_user instead of $user
+ 
+ if (!$is_admin && !$is_assigned_moderator) {
+ wp_send_json_error('Access denied - You are not assigned to this order');
+ return;
+ }
+ 
+ // Start output buffering to capture the HTML
+ ob_start();
+ ?>
+ 
+ <div class="order-details-container">
+ 
+ <!-- Customer Information -->
+ <div class="order-details-section">
+ <h4> Customer Information</h4>
+ <table style="width: 100%;">
+ <tr>
+ <td style="width: 30%;"><strong>Name:</strong></td>
+ <td><?php echo esc_html($order->get_formatted_billing_full_name()); ?> 
+ <button class="copy-btn" data-text="<?php echo esc_attr($order->get_formatted_billing_full_name()); ?>" title="Copy Name" aria-label="Copy Name">
+ <span class="dashicons dashicons-admin-page"></span>
+ </button></td>
+ </tr>
+ <tr>
+ <td><strong>Phone:</strong></td>
+ <td><a href="tel:<?php echo esc_attr($order->get_billing_phone()); ?>"><?php echo esc_html($order->get_billing_phone()); ?></a>
+ <button class="copy-btn" data-text="<?php echo esc_attr($order->get_billing_phone()); ?>" title="Copy Phone" aria-label="Copy Phone">
+ <span class="dashicons dashicons-admin-page"></span>
+ </button>
+ </td>
+ </tr>
+ <tr>
+ <td><strong>Address:</strong></td>
+ <td>
+ <?php
+ $address_parts = array_filter(array(
+ $order->get_billing_address_1(),
+ $order->get_billing_address_2(),
+ trim($order->get_billing_city() . ', ' . $order->get_billing_state() . ' ' . $order->get_billing_postcode(), ', '),
+ WC()->countries->countries[$order->get_billing_country()] ?? $order->get_billing_country(),
+ ));
+ $full_address = implode(', ', $address_parts);
+ echo esc_html($order->get_billing_address_1()) . '<br>';
+ if ($order->get_billing_address_2()) {
+ echo esc_html($order->get_billing_address_2()) . '<br>';
+ }
+ echo esc_html(trim($order->get_billing_city() . ', ' . $order->get_billing_state() . ' ' . $order->get_billing_postcode(), ', '));
+ ?><br>
+ <?php echo esc_html(WC()->countries->countries[$order->get_billing_country()] ?? $order->get_billing_country()); ?>
+ <button class="copy-btn" data-text="<?php echo esc_attr($full_address); ?>" title="Copy Address" aria-label="Copy Address">
+ <span class="dashicons dashicons-admin-page"></span>
+ </button>
+ 
+ </td>
+ </tr>
+ </table>
+
+ </div>
+ 
+ <!-- Order Items -->
+ <div class="order-details-section">
+ <h4> Order Items</h4>
+ <table style="width: 100%; border-collapse: collapse;">
+ <thead>
+ <tr style="background: #f1f1f1;">
+ <th style="padding: 8px; text-align: left; border-bottom: 1px solid #ddd;">Product</th>
+ <th style="padding: 8px; text-align: center; border-bottom: 1px solid #ddd;">Quantity</th>
+ <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">Price</th>
+ <th style="padding: 8px; text-align: right; border-bottom: 1px solid #ddd;">Total</th>
+ </tr>
+ </thead>
+ <tbody>
+ <?php 
+ foreach ($order->get_items() as $item_id => $item) : 
+ $product = $item->get_product();
+ ?>
+ <tr>
+ <td style="padding: 8px; border-bottom: 1px solid #eee;">
+ <strong><?php echo $item->get_name(); ?></strong>
+ <?php if ($product) : ?>
+ <br><small>SKU: <?php echo $product->get_sku() ?: 'N/A'; ?></small>
+ <?php endif; ?>
+ </td>
+ <td style="padding: 8px; text-align: center; border-bottom: 1px solid #eee;">
+ <?php echo $item->get_quantity(); ?>
+ </td>
+ <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">
+ <?php echo wc_price($item->get_subtotal() / $item->get_quantity()); ?>
+ </td>
+ <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">
+ <?php echo wc_price($item->get_total()); ?>
+ </td>
+ </tr>
+ <?php endforeach; ?>
+ </tbody>
+ <tfoot>
+ <?php
+ $subtotal = $order->get_subtotal();
+ $shipping_total = $order->get_shipping_total();
+ $tax_total = $order->get_total_tax();
+ $order_total = $order->get_total();
+ ?>
+ <tr>
+ <td colspan="3" style="padding: 8px; text-align: right; border-top: 2px solid #ddd;"><strong>Subtotal:</strong></td>
+ <td style="padding: 8px; text-align: right; border-top: 2px solid #ddd;"><?php echo wc_price($subtotal); ?></td>
+ </tr>
+ <?php if ($shipping_total > 0) : ?>
+ <tr>
+ <td colspan="3" style="padding: 8px; text-align: right;"><strong>Shipping:</strong></td>
+ <td style="padding: 8px; text-align: right;"><?php echo wc_price($shipping_total); ?></td>
+ </tr>
+ <?php endif; ?>
+ <?php if ($tax_total > 0) : ?>
+ <tr>
+ <td colspan="3" style="padding: 8px; text-align: right;"><strong>Tax:</strong></td>
+ <td style="padding: 8px; text-align: right;"><?php echo wc_price($tax_total); ?></td>
+ </tr>
+ <?php endif; ?>
+ <tr>
+ <td colspan="3" style="padding: 8px; text-align: right; font-weight: bold;"><strong>Total:</strong></td>
+ <td style="padding: 8px; text-align: right; font-weight: bold;"><?php echo wc_price($order_total); ?></td>
+ </tr>
+ </tfoot>
+ </table>
+ </div>
+
+ <!-- Quick Status Update & Moderator Change -->
+ <div class="order-details-section">
+ <h4> Quick Updates</h4>
+ 
+ <!-- Status Update Form -->
+ <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+ <h5 style="margin-top: 0;">Update Order Status</h5>
+ <form method="post" id="update_status_form" style="display: flex; gap: 10px; align-items: center;">
+ <?php wp_nonce_field('update_order_status', 'status_update_nonce'); ?>
+ <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
+ <input type="hidden" name="update_order_status" value="1">
+ <select name="order_status" id="order_status_select" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+ <option value="">Select New Status</option>
+ <option value="pending" <?php selected($order->get_status(), 'pending'); ?>>Pending</option>
+ <option value="partial" <?php selected($order->get_status(), 'partial'); ?>>Partial</option>
+ <option value="processing" <?php selected($order->get_status(), 'processing'); ?>>Processing</option>
+ <option value="on-hold" <?php selected($order->get_status(), 'on-hold'); ?>>On Hold</option>
+ <option value="completed" <?php selected($order->get_status(), 'completed'); ?>>Completed</option>
+ <option value="cancelled" <?php selected($order->get_status(), 'cancelled'); ?>>Cancelled</option>
+ </select>
+ <button type="submit" class="button button-primary" id="update_status_btn">
+ Update Status
+ </button>
+ </form>
+ <p style="margin-top: 10px; font-size: 12px; color: #666;">
+ Current status: <strong id="current_status_display"><?php echo wc_get_order_status_name($order->get_status()); ?></strong>
+ </p>
+ <div id="status_update_message" style="margin-top: 10px; display: none;"></div>
+ </div>
+ <?php
+ $user = wp_get_current_user();
+ if ( in_array( 'administrator', (array) $user->roles ) ) {
+ ?>
+ <!-- Moderator Change Form -->
+ <div style="padding: 15px; background: #f0f6ff; border-radius: 5px;">
+ <h5 style="margin-top: 0;">Change Assigned Moderator</h5>
+ <?php
+ // Get current moderator
+ $current_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $current_moderator_name = get_post_meta($order_id, '_assigned_moderator_name', true);
+ 
+ // Get only ACTIVE users with assigned roles
+ $assigned_roles = aoam_get_assigned_roles();
+ $moderators = get_users(array(
+ 'role__in' => $assigned_roles,
+ 'meta_query' => array(
+ array(
+ 'key' => 'moderator_status',
+ 'value' => 'active',
+ 'compare' => '='
+ )
+ ),
+ 'orderby' => 'display_name'
+ ));
+ ?>
+ 
+ <div style="margin-bottom: 10px;">
+ <strong>Current Moderator:</strong>
+ <?php if ($current_moderator_name): ?>
+ <span style="color: #0073aa; font-weight: bold;"><?php echo esc_html($current_moderator_name); ?></span>
+ <?php 
+ $moderator_sequence = get_user_meta($current_moderator_id, 'moderator_sequence', true);
+ if ($moderator_sequence) {
+ echo ' <span style="color: #666;">(User ' . $moderator_sequence . ')</span>';
+ }
+ ?>
+ <?php else: ?>
+ <span style="color: #cc1818; font-style: italic;">Not assigned</span>
+ <?php endif; ?>
+ </div>
+ 
+ <form method="post" id="change_moderator_form" style="display: flex; gap: 10px; align-items: center;">
+ <?php wp_nonce_field('change_order_moderator', 'moderator_change_nonce'); ?>
+ <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
+ <input type="hidden" name="change_order_moderator" value="1">
+ 
+ <select name="new_moderator_id" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; min-width: 200px;">
+                    <option value="">Select New User</option>
+ <?php foreach ($moderators as $moderator): 
+ $moderator_sequence = get_user_meta($moderator->ID, 'moderator_sequence', true);
+ $display_name = $moderator->display_name . ($moderator_sequence ? ' (User ' . $moderator_sequence . ')' : '');
+ ?>
+ <option value="<?php echo $moderator->ID; ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
+ <?php echo esc_html($display_name); ?>
+ </option>
+ <?php endforeach; ?>
+ </select>
+ 
+ <button type="submit" class="button" style="background: #0073aa; color: white; border-color: #0073aa;">
+ Change User
+ </button>
+ </form>
+ </div>
+ <?php } ?>
+ </div>
+ <script>
+ jQuery(document).ready(function($) {
+ // Initialize copy buttons for this modal
+ function initCopyButtons() {
+ $('.copy-btn').off('click').on('click', function(e) {
+ e.preventDefault();
+ e.stopPropagation();
+ 
+ var $button = $(this);
+ var textToCopy = $button.data('text');
+ 
+ // Create temporary input for copying
+ var $temp = $('<textarea>');
+ $('body').append($temp);
+ $temp.val(textToCopy).select();
+ 
+ try {
+ var successful = document.execCommand('copy');
+ if (successful) {
+ var originalHtml = $button.html();
+ var originalColor = $button.css('color');
+ 
+ $button.html('Copied');
+ $button.css({
+ 'color': 'green',
+ 'border-color': 'green'
+ });
+ 
+ setTimeout(function() {
+ $button.html(originalHtml);
+ $button.css({
+ 'color': originalColor,
+ 'border-color': '#ddd'
+ });
+ }, 2000);
+ } else {
+ alert('');
+ }
+ } catch (err) {
+ alert('');
+ }
+ 
+ $temp.remove();
+ });
+ }
+ 
+ // Initialize copy buttons immediately
+ initCopyButtons();
+ });
+ </script> 
+ 
+ <style>
+ .copy-btn {
+ margin-left: 10px;
+ background: #f8fafc;
+ border: 1px solid #dbe3ea;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+ cursor: pointer;
+ padding: 5px 7px;
+ font-size: 14px;
+ line-height: 1;
+ vertical-align: middle;
+ transition: all 0.3s ease;
+ }
+ .copy-btn .dashicons {
+ width: 14px;
+ height: 14px;
+ font-size: 14px;
+ line-height: 14px;
+ }
+ 
+ .copy-btn:hover {
+ background-color: #eaf4ff;
+ border-color: #91c7f3;
+ color: #0a5f9e;
+ }
+ .order-details-container table {
+ border-collapse: collapse;
+ width: 100%;
+ }
+ .order-details-container td {
+ padding: 7px 4px;
+ vertical-align: top;
+ }
+ .order-details-container td:first-child {
+ color: #374151;
+ width: 120px;
+ }
+ .order-details-container thead tr {
+ background: #f3f6f9 !important;
+ }
+ .order-details-container th {
+ color: #374151;
+ font-size: 13px;
+ font-weight: 700;
+ }
+ .order-details-container tbody td {
+ border-bottom: 1px solid #eef1f4 !important;
+ }
+ @media (max-width: 768px) {
+ .aoam-order-modal {
+ border-radius: 0;
+ height: 100vh;
+ max-height: 100vh;
+ padding: 14px;
+ width: 100vw;
+ }
+ .aoam-modal-header {
+ margin-bottom: 14px;
+ padding: 14px;
+ }
+ .aoam-modal-header h3 {
+ font-size: 18px;
+ }
+ .order-details-section {
+ border-radius: 10px;
+ padding: 14px;
+ }
+ .order-details-container td:first-child {
+ width: 82px;
+ }
+ .order-details-container th,
+ .order-details-container td {
+ font-size: 12px;
+ }
+ }
+ 
+ 
+ @media (max-width: 768px) {
+ .copy-btn {
+ padding: 2px 6px;
+ font-size: 12px;
+ }
+ }
+ </style>
+ <script>
+ jQuery(document).ready(function($) {
+ // Handle status update form submission
+ $('#update_status_form').on('submit', function(e) {
+ e.preventDefault();
+ 
+ var formData = $(this).serialize();
+ var $button = $('#update_status_btn');
+ var $message = $('#status_update_message');
+ 
+ // Validate selection
+ var selectedStatus = $('#order_status_select').val();
+ if (!selectedStatus) {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">Please select a status</div>').show();
+ return;
+ }
+ 
+ // Show loading state
+ $button.text('Updating...').prop('disabled', true);
+ $message.hide();
+ 
+ $.ajax({
+ url: '<?php echo admin_url('admin-ajax.php'); ?>',
+ type: 'POST',
+ data: formData + '&action=update_order_status_ajax',
+ success: function(response) {
+ if (response.success) {
+ // Show success message
+ $message.html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;"> ' + response.data.message + ' Reloading page...</div>').show();
+ 
+ // Update status display in MODAL ONLY
+ $('#current_status_display').text(response.data.new_status_label);
+ 
+ // RELOAD THE PAGE AFTER 1 SECOND
+ setTimeout(function() {
+ location.reload();
+ }, 1000);
+ 
+ } else {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;"> ' + response.data + '</div>').show();
+ $button.text('Update Status').prop('disabled', false);
+ }
+ },
+ error: function(xhr, status, error) {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;"> Network error. Please try again.</div>').show();
+ $button.text('Update Status').prop('disabled', false);
+ console.error('Status update error:', error);
+ }
+ });
+ });
+ 
+ // Handle moderator change form submission
+ $('#change_moderator_form').on('submit', function(e) {
+ e.preventDefault();
+ 
+ var formData = $(this).serialize();
+ var $button = $(this).find('button[type="submit"]');
+ 
+ // Validate selection
+ var selectedModerator = $(this).find('select[name="new_moderator_id"]').val();
+ if (!selectedModerator) {
+ alert('Please select a user');
+ return;
+ }
+ 
+ // Show loading state
+ $button.text('Changing...').prop('disabled', true);
+ 
+ $.ajax({
+ url: '<?php echo admin_url('admin-ajax.php'); ?>',
+ type: 'POST',
+ data: formData + '&action=change_order_moderator_ajax',
+ success: function(response) {
+ if (response.success) {
+ alert(' User changed successfully!');
+ location.reload(); // Reload to show updated moderator
+ } else {
+ alert('Error: ' + response.data);
+ $button.text('Change User').prop('disabled', false);
+ }
+ },
+ error: function() {
+ alert('Network error. Please try again.');
+ $button.text('Change User').prop('disabled', false);
+ }
+ });
+ });
+ });
+ </script>
+ </div>
+ 
+ <style>
+ .order-status-badge { 
+ padding: 4px 8px; 
+ border-radius: 3px; 
+ font-size: 12px; 
+ font-weight: bold;
+ display: inline-block;
+ }
+ .status-pending { background: #ffb900; color: #000; }
+ .status-partial { background: #777; color: #fff; }
+ .status-processing { background: #00a0d2; color: #fff; }
+ .status-on-hold { background: #cc1818; color: #fff; }
+ .status-completed { background: #46b450; color: #fff; }
+ .status-cancelled { background: #aaa; color: #fff; }
+ </style>
+ <?php
+ 
+ $content = ob_get_clean();
+ wp_send_json_success($content);
+}
+
+
+// AJAX handler for updating order status
+add_action('wp_ajax_update_order_status_ajax', 'handle_update_order_status_ajax');
+
+function handle_update_order_status_ajax() {
+ // Check nonce
+ if (!isset($_POST['status_update_nonce']) || !wp_verify_nonce($_POST['status_update_nonce'], 'update_order_status')) {
+ wp_send_json_error('Security verification failed');
+ return;
+ }
+ 
+ // Validate inputs
+ if (!isset($_POST['order_id']) || empty($_POST['order_id'])) {
+ wp_send_json_error('Order ID is required');
+ return;
+ }
+ 
+ if (!isset($_POST['order_status']) || empty($_POST['order_status'])) {
+ wp_send_json_error('Please select a status');
+ return;
+ }
+ 
+ $order_id = intval($_POST['order_id']);
+ $new_status = sanitize_text_field($_POST['order_status']);
+ $current_user = wp_get_current_user();
+ 
+ // Get the order
+ $order = wc_get_order($order_id);
+ if (!$order) {
+ wp_send_json_error('Order not found');
+ return;
+ }
+ 
+ // Check permissions
+ $assigned_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $is_admin = current_user_can('manage_options');
+ $is_assigned_moderator = ($assigned_moderator_id == $current_user->ID);
+ 
+ if (!$is_admin && !$is_assigned_moderator) {
+ wp_send_json_error('Access denied - You are not assigned to this order');
+ return;
+ }
+ 
+ // Get current status before update
+ $old_status = $order->get_status();
+ 
+ // Valid statuses
+ $valid_statuses = array('partial', 'pending', 'processing', 'on-hold', 'completed', 'cancelled');
+ if (!in_array($new_status, $valid_statuses)) {
+ wp_send_json_error('Invalid order status');
+ return;
+ }
+ 
+ // Update order status
+ $order->update_status($new_status);
+ 
+ // Add order note
+ $order_note = sprintf(
+ 'Order status changed from %s to %s by %s: %s',
+ $old_status,
+ $new_status,
+ $is_admin ? 'admin' : 'moderator',
+ $current_user->display_name
+ );
+ 
+ $order->add_order_note($order_note);
+ 
+ // Return success with new status info
+ $response = array(
+ 'message' => 'Status updated successfully!',
+ 'new_status' => $new_status,
+ 'new_status_label' => wc_get_order_status_name($new_status),
+ 'old_status' => $old_status
+ );
+ 
+ wp_send_json_success($response);
+}
+
+// AJAX handler for changing order moderator
+add_action('wp_ajax_change_order_moderator_ajax', 'handle_change_order_moderator_ajax');
+
+function handle_change_order_moderator_ajax() {
+ // Check nonce
+ if (!isset($_POST['moderator_change_nonce']) || !wp_verify_nonce($_POST['moderator_change_nonce'], 'change_order_moderator')) {
+ wp_send_json_error('Security check failed');
+ }
+ 
+ // Check permissions
+ if (!current_user_can('manage_options')) {
+ wp_send_json_error('Insufficient permissions. Only administrators can change moderators.');
+ }
+ 
+ // Validate inputs
+ if (!isset($_POST['order_id']) || empty($_POST['order_id'])) {
+ wp_send_json_error('Order ID is required');
+ }
+ 
+ if (!isset($_POST['new_moderator_id']) || empty($_POST['new_moderator_id'])) {
+ wp_send_json_error('Please select a moderator');
+ }
+ 
+ $order_id = intval($_POST['order_id']);
+ $new_moderator_id = intval($_POST['new_moderator_id']);
+ 
+ // Get order and moderator
+ $order = wc_get_order($order_id);
+ $moderator = get_userdata($new_moderator_id);
+ 
+ if (!$order) {
+ wp_send_json_error('Order not found');
+ }
+ 
+ if (!$moderator) {
+ wp_send_json_error('Moderator not found');
+ }
+ 
+ // Get current moderator info before change
+ $old_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $old_moderator_name = get_post_meta($order_id, '_assigned_moderator_name', true);
+ 
+ // Update moderator information
+ update_post_meta($order_id, '_assigned_moderator_id', $new_moderator_id);
+ update_post_meta($order_id, '_assigned_moderator_name', $new_moderator->display_name);
+ 
+ // Get sequence info
+ $new_moderator_sequence = get_user_meta($new_moderator_id, 'moderator_sequence', true);
+ 
+ // Add order note
+ $order_note = sprintf(
+ 'Assigned moderator changed from %s to %s (Moderator %s) by admin: %s',
+ $old_moderator_name ?: 'None',
+ $new_moderator->display_name,
+ $new_moderator_sequence ?: 'N/A',
+ wp_get_current_user()->display_name
+ );
+ 
+ $order->add_order_note($order_note);
+ 
+ wp_send_json_success('Moderator updated successfully');
+}
+
+
+// Remove WooCommerce menus for moderators
+add_action('admin_menu', 'remove_woocommerce_menus_for_moderators', 999);
+
+function remove_woocommerce_menus_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ remove_menu_page('woocommerce');
+ remove_menu_page('edit.php?post_type=shop_order');
+ remove_menu_page('wc-admin');
+ remove_menu_page('woocommerce-marketing');
+ remove_menu_page('admin.php?page=wc-settings&tab=checkout&from=PAYMENTS_MENU_ITEM');
+ remove_menu_page('tools.php');
+ remove_menu_page('edit-comments.php');
+ remove_menu_page('edit.php');
+ remove_menu_page('edit.php?post_type=post-wcode');
+ remove_menu_page('admin.php?page=awcfe_admin_settings');
+ remove_menu_page('admin.php?page=wpcf7');
+ remove_menu_page('admin.php?page=yith_wcan_panel');
+ }
+}
+
+
+// Alternative: Add moderator section after order details
+add_action('woocommerce_admin_order_data_after_order_details', 'add_moderator_section_after_order_details');
+
+function add_moderator_section_after_order_details($order) {
+ $order_id = $order->get_id();
+ $current_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $current_moderator_name = get_post_meta($order_id, '_assigned_moderator_name', true);
+ 
+ ?>
+ <div class="order_data_column" style="width: 100%; margin: 20px 0; padding: 20px; background: white; border: 1px solid #ccd0d4; border-radius: 4px;">
+        <h3 style="margin-top: 0; color: #0073aa;">Assign Moderator</h3>
+ 
+ <div style="margin-bottom: 15px;">
+ <p><strong>Current Moderator:</strong></p>
+ <?php if ($current_moderator_name): ?>
+ <div style="padding: 10px; background: #f0f6fc; border-radius: 4px; border-left: 4px solid #0073aa;">
+ <strong style="font-size: 16px; color: #0073aa;"><?php echo esc_html($current_moderator_name); ?></strong>
+ <?php 
+ $moderator_sequence = get_user_meta($current_moderator_id, 'moderator_sequence', true);
+ if ($moderator_sequence) {
+ echo ' <span style="color: #666;">(Moderator ' . $moderator_sequence . ')</span>';
+ }
+ ?>
+ </div>
+ <?php else: ?>
+ <div style="padding: 10px; background: #fff8e1; border-radius: 4px; border-left: 4px solid #ffb900;">
+ <span style="color: #cc1818; font-style: italic;">Not assigned to any moderator</span>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <?php
+ // Get all active moderators
+ $moderators = get_users(array(
+ 'role' => 'moderator',
+ 'meta_key' => 'moderator_status',
+ 'meta_value' => 'active',
+ 'orderby' => 'display_name'
+ ));
+ ?>
+ 
+ <div class="form-field">
+ <label for="assigned_moderator_direct"><strong>Change Moderator:</strong></label>
+ <select name="assigned_moderator_direct" id="assigned_moderator_direct" style="width: 100%; margin-top: 5px;">
+ <option value=""> Select New Moderator </option>
+ <?php foreach ($moderators as $moderator): 
+ $moderator_sequence = get_user_meta($moderator->ID, 'moderator_sequence', true);
+ $display_name = $moderator->display_name . ($moderator_sequence ? ' (Moderator ' . $moderator_sequence . ')' : '');
+ ?>
+ <option value="<?php echo $moderator->ID; ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
+ <?php echo esc_html($display_name); ?>
+ </option>
+ <?php endforeach; ?>
+ </select>
+ </div>
+ 
+ <p style="margin-top: 15px;">
+ <button type="button" id="update_moderator_direct" class="button button-primary">
+ Update Moderator
+ </button>
+ </p>
+ </div>
+ 
+ <script>
+ jQuery(document).ready(function($) {
+ $('#update_moderator_direct').click(function() {
+ var newModeratorId = $('#assigned_moderator_direct').val();
+ var orderId = <?php echo $order_id; ?>;
+ 
+ if (!newModeratorId) {
+ alert(' Please select a moderator.');
+ return;
+ }
+ 
+ if (confirm('Are you sure you want to change the assigned moderator?')) {
+ var $button = $(this);
+ $button.text('Updating...').prop('disabled', true);
+ 
+ $.ajax({
+ url: '<?php echo admin_url('admin-ajax.php'); ?>',
+ type: 'POST',
+ data: {
+ action: 'update_order_moderator_direct',
+ order_id: orderId,
+ moderator_id: newModeratorId,
+ nonce: '<?php echo wp_create_nonce('direct_update_moderator'); ?>'
+ },
+ success: function(response) {
+ if (response.success) {
+ alert(' Moderator updated successfully!');
+ location.reload();
+ } else {
+ alert(' Error: ' + response.data);
+ $button.text(' Update Moderator').prop('disabled', false);
+ }
+ },
+ error: function() {
+ alert(' Network error. Please try again.');
+ $button.text(' Update Moderator').prop('disabled', false);
+ }
+ });
+ }
+ });
+ });
+ </script>
+ <?php
+ }
+ 
+ // AJAX handler for direct update
+ add_action('wp_ajax_update_order_moderator_direct', 'handle_update_order_moderator_direct');
+ 
+ function handle_update_order_moderator_direct() {
+ if (!wp_verify_nonce($_POST['nonce'], 'direct_update_moderator')) {
+ wp_send_json_error('Security check failed');
+ }
+ 
+ if (!current_user_can('manage_options')) {
+ wp_send_json_error('Insufficient permissions');
+ }
+ 
+ $order_id = intval($_POST['order_id']);
+ $moderator_id = intval($_POST['moderator_id']);
+ 
+ $order = wc_get_order($order_id);
+ $moderator = get_userdata($moderator_id);
+ 
+ if (!$order || !$moderator) {
+ wp_send_json_error('Invalid order or moderator');
+ }
+ 
+ // Get current moderator before update
+ $old_moderator_id = get_post_meta($order_id, '_assigned_moderator_id', true);
+ $old_moderator_name = get_post_meta($order_id, '_assigned_moderator_name', true);
+ 
+ // Update moderator information
+ update_post_meta($order_id, '_assigned_moderator_id', $moderator_id);
+ update_post_meta($order_id, '_assigned_moderator_name', $moderator->display_name);
+ 
+ // Get moderator sequence for note
+ $moderator_sequence = get_user_meta($moderator_id, 'moderator_sequence', true);
+ 
+ // Add order note
+ $order_note = sprintf(
+ 'Assigned moderator changed from %s to %s (Moderator %s) by admin: %s',
+ $old_moderator_name ?: 'None',
+ $moderator->display_name,
+ $moderator_sequence ?: 'N/A',
+ wp_get_current_user()->display_name
+ );
+ 
+ $order->add_order_note($order_note);
+ 
+ wp_send_json_success('Moderator updated successfully');
+ }
+ 
+ // Remove all unnecessary admin menus for moderators
+ add_action('admin_menu', 'remove_admin_menus_for_moderators', 9999);
+ 
+ function remove_admin_menus_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ // KEEP THESE MENUS:
+ // - Dashboard (index.php) - Already kept by default
+ // - My Orders (moderator-simple-orders) - Our custom page
+ // - Profile (profile.php) - User profile
+ 
+ // REMOVE ALL OTHER MENUS:
+ global $menu, $submenu;
+ 
+ $allowed_menus = array(
+ 'index.php', // Dashboard
+ 'moderator-simple-orders', // My Orders
+ 'profile.php', // Profile
+ 'separator1', // Separators (optional)
+ 'separator2',
+ 'separator-last'
+ );
+ 
+ // Remove top-level menus
+ foreach ($menu as $menu_key => $menu_item) {
+ $menu_slug = $menu_item[2];
+ 
+ // Remove if not in allowed list
+ if (!in_array($menu_slug, $allowed_menus)) {
+ remove_menu_page($menu_slug);
+ }
+ }
+ 
+ // Specifically remove common menus that might not be caught above
+ $menus_to_remove = array(
+ // WordPress Core
+ 'edit.php', // Posts
+ 'upload.php', // Media
+ 'edit.php?post_type=page', // Pages
+ 'edit-comments.php', // Comments
+ 'themes.php', // Appearance
+ 'plugins.php', // Plugins
+ 'users.php', // Users
+ 'tools.php', // Tools
+ 'options-general.php', // Settings
+ 
+ // WooCommerce
+ 'woocommerce',
+ 'edit.php?post_type=shop_order',
+ 'wc-admin',
+ 'woocommerce-marketing',
+ 'wc-admin&path=/analytics/overview',
+ 'wc-reports',
+ 'wc-settings',
+ 'wc-status',
+ 'wc-addons',
+ 
+ // Other common plugins
+ 'jetpack',
+ 'akismet-key-config',
+ 'wpseo_dashboard',
+ 
+ // Our plugin's admin pages (except My Orders)
+ 'moderator-settings',
+ 'moderator-recent-assignments', 
+ 'moderator-sequence-status',
+ 'moderator-product-assignments'
+ );
+ 
+ foreach ($menus_to_remove as $menu_slug) {
+ remove_menu_page($menu_slug);
+ }
+ }
+ }
+ 
+ // Remove admin bar items for moderators - UPDATED WITH LOGOUT
+ add_action('wp_before_admin_bar_render', 'remove_admin_bar_items_for_moderators', 999);
+ 
+ function remove_admin_bar_items_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ global $wp_admin_bar;
+ 
+ // Keep only these admin bar items
+ $allowed_nodes = array(
+ 'site-name',
+ 'view-site', 
+ 'edit-profile',
+ 'user-actions',
+ 'user-info',
+ 'logout', // KEEP LOGOUT
+ 'my-account' // KEEP MY ACCOUNT
+ );
+ 
+ $nodes = $wp_admin_bar->get_nodes();
+ 
+ foreach ($nodes as $node_id => $node) {
+ if (!in_array($node_id, $allowed_nodes)) {
+ $wp_admin_bar->remove_node($node_id);
+ }
+ }
+ 
+ // Add custom "My Orders" link to admin bar
+ $wp_admin_bar->add_node(array(
+ 'id' => 'moderator-orders',
+ 'title' => ' My Orders',
+ 'href' => admin_url('admin.php?page=moderator-simple-orders'),
+ 'parent' => 'site-name'
+ ));
+ 
+ // ADD: Custom logout link in a better position
+ $wp_admin_bar->add_node(array(
+ 'id' => 'moderator-logout',
+ 'title' => ' Logout',
+ 'href' => wp_logout_url(),
+ 'parent' => 'top-secondary',
+ 'meta' => array(
+ 'title' => 'Logout from the system'
+ )
+ ));
+ }
+ }
+ 
+ // Redirect moderators from restricted pages
+ add_action('admin_init', 'redirect_moderators_from_restricted_pages');
+ 
+ function redirect_moderators_from_restricted_pages() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ $current_page = $_SERVER['REQUEST_URI'] ?? '';
+ 
+ // Allowed pages for moderators
+ $allowed_pages = array(
+ '/wp-admin/index.php', // Dashboard
+ '/wp-admin/profile.php', // Profile
+ '/wp-admin/admin.php?page=moderator-simple-orders', // My Orders
+ '/wp-admin/admin-ajax.php', // AJAX calls
+ );
+ 
+ // Check if current page is not allowed
+ $is_allowed = false;
+ foreach ($allowed_pages as $allowed_page) {
+ if (strpos($current_page, $allowed_page) !== false) {
+ $is_allowed = true;
+ break;
+ }
+ }
+ 
+ // If not allowed, redirect to My Orders page
+ if (!$is_allowed && strpos($current_page, '/wp-admin/') !== false) {
+ wp_redirect(admin_url('admin.php?page=moderator-simple-orders'));
+ exit;
+ }
+ }
+ }
+ 
+ // Customize the admin dashboard for moderators - ENHANCED VERSION
+ add_action('wp_dashboard_setup', 'customize_dashboard_for_moderators', 9999);
+ 
+ function customize_dashboard_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ global $wp_meta_boxes;
+ 
+ // COMPLETELY CLEAR ALL DASHBOARD WIDGETS
+ $wp_meta_boxes['dashboard'] = array();
+ 
+ // Remove WooCommerce specific widgets
+ remove_meta_box('woocommerce_dashboard_status', 'dashboard', 'normal');
+ remove_meta_box('wc_admin_dashboard_setup', 'dashboard', 'normal');
+ remove_meta_box('dashboard_woocommerce_setup', 'dashboard', 'normal');
+ remove_meta_box('ecommerce_dashboard_widget', 'dashboard', 'normal');
+ 
+ // Remove other common widgets
+ remove_meta_box('dashboard_right_now', 'dashboard', 'normal');
+ remove_meta_box('dashboard_activity', 'dashboard', 'normal');
+ remove_meta_box('dashboard_quick_press', 'dashboard', 'side');
+ remove_meta_box('dashboard_primary', 'dashboard', 'side');
+ remove_meta_box('dashboard_site_health', 'dashboard', 'normal');
+ remove_meta_box('dashboard_php_nag', 'dashboard', 'normal');
+ 
+ // Remove any remaining WooCommerce widgets
+ remove_action('wp_dashboard_setup', array('WC_Admin', 'init_dashboard'));
+ 
+ // Add custom moderator dashboard widgets
+ wp_add_dashboard_widget(
+ 'moderator_orders_widget',
+ ' My Order Statistics',
+ 'moderator_orders_dashboard_widget'
+ );
+ 
+ wp_add_dashboard_widget(
+ 'moderator_quick_actions',
+ ' Quick Actions',
+ 'moderator_quick_actions_widget'
+ );
+ 
+ wp_add_dashboard_widget(
+ 'moderator_recent_orders',
+ ' Recent Orders',
+ 'moderator_recent_orders_widget'
+ );
+ }
+ }
+// Recent orders widget for moderator dashboard
+function moderator_recent_orders_widget() {
+ $current_user = wp_get_current_user();
+ $moderator_id = $current_user->ID;
+ 
+ // Get recent orders
+ global $wpdb;
+ $recent_orders = $wpdb->get_results($wpdb->prepare("
+ SELECT p.ID, p.post_date, p.post_status 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d
+ ORDER BY p.post_date DESC 
+ LIMIT 5
+ ", $moderator_id));
+ 
+ if (empty($recent_orders)) {
+ echo '<p>No orders assigned yet.</p>';
+ return;
+ }
+ 
+ echo '<div style="max-height: 300px; overflow-y: auto;">';
+ echo '<table style="width: 100%; border-collapse: collapse;">';
+ 
+ foreach ($recent_orders as $order_data) {
+ $order = wc_get_order($order_data->ID);
+ if (!$order) continue;
+ 
+ $order_status = $order->get_status();
+ $status_class = 'status-' . $order_status;
+ $status_label = wc_get_order_status_name($order_status);
+ $order_date = date('M j, g:i A', strtotime($order_data->post_date));
+ $is_today = date('Y-m-d', strtotime($order_data->post_date)) === date('Y-m-d');
+ 
+ echo '<tr style="border-bottom: 1px solid #f0f0f0;">';
+ echo '<td style="padding: 8px 0;">';
+ echo '<strong>#' . $order->get_id() . '</strong>';
+ if ($is_today) {
+ echo ' <span style="color: #46b450; font-size: 10px;"></span>';
+ }
+ echo '<br><small style="color: #666;">' . $order_date . '</small>';
+ echo '</td>';
+ echo '<td style="padding: 8px 0; text-align: right;">';
+ echo '<span class="order-status-badge-small ' . $status_class . '">' . $status_label . '</span>';
+ echo '</td>';
+ echo '</tr>';
+ }
+ 
+ echo '</table>';
+ echo '</div>';
+ 
+ echo '<div style="margin-top: 10px; text-align: center;">';
+ echo '<a href="' . admin_url('admin.php?page=moderator-simple-orders') . '" class="button button-small">View All Orders</a>';
+ echo '</div>';
+ 
+ ?>
+ <style>
+ .order-status-badge-small {
+ padding: 2px 6px;
+ border-radius: 3px;
+ font-size: 10px;
+ font-weight: bold;
+ display: inline-block;
+ }
+ .status-pending { background: #ffb900; color: #000; }
+ .status-partial { background: #777; color: #fff; }
+ .status-processing { background: #00a0d2; color: #fff; }
+ .status-on-hold { background: #cc1818; color: #fff; }
+ .status-completed { background: #46b450; color: #fff; }
+ .status-cancelled { background: #aaa; color: #fff; }
+ </style>
+ <?php
+}
+// Remove WooCommerce admin bar menu for moderators
+add_action('wp_before_admin_bar_render', 'remove_woocommerce_admin_bar', 999);
+
+function remove_woocommerce_admin_bar() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ global $wp_admin_bar;
+ $wp_admin_bar->remove_node('woocommerce');
+ $wp_admin_bar->remove_node('wc-admin');
+ }
+}
+
+// Remove WooCommerce admin footer for moderators
+add_filter('admin_footer_text', 'remove_woocommerce_admin_footer', 999);
+
+function remove_woocommerce_admin_footer($text) {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ // Remove WooCommerce footer text
+ $text = 'Thank you for using WordPress as a Moderator.';
+ }
+ 
+ return $text;
+}
+
+// Disable WooCommerce admin for moderators
+add_action('admin_init', 'disable_woocommerce_admin_for_moderators');
+
+function disable_woocommerce_admin_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ // Disable WooCommerce admin
+ add_filter('woocommerce_admin_disabled', '__return_true');
+ add_filter('woocommerce_marketing_menu_items', '__return_empty_array');
+ add_filter('woocommerce_admin_features', '__return_empty_array');
+ }
+}
+
+// Custom dashboard widget showing order statistics
+function moderator_orders_dashboard_widget() {
+ $current_user = wp_get_current_user();
+ $moderator_id = $current_user->ID;
+ 
+ // Get today's orders count
+ global $wpdb;
+ $today = date('Y-m-d');
+ 
+ $today_orders = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(pm.post_id) 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d
+ AND DATE(p.post_date) = %s
+ ", $moderator_id, $today));
+ 
+ // Get total pending orders
+ $pending_orders = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(pm.post_id) 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d
+ AND p.post_status = 'wc-pending'
+ ", $moderator_id));
+ 
+ // Get total partial orders
+ $partial_orders = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(pm.post_id) 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d
+ AND p.post_status = 'wc-partial'
+ ", $moderator_id));
+ 
+ // Get total processing orders
+ $processing_orders = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(pm.post_id) 
+ FROM {$wpdb->postmeta} pm 
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = '_assigned_moderator_id' 
+ AND pm.meta_value = %d
+ AND p.post_status = 'wc-processing'
+ ", $moderator_id));
+ 
+ // Get total assigned orders
+ $total_orders = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(post_id) 
+ FROM {$wpdb->postmeta} 
+ WHERE meta_key = '_assigned_moderator_id' 
+ AND meta_value = %d
+ ", $moderator_id));
+ 
+ ?>
+ <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+ <div style="text-align: center; padding: 15px; background: #e7f3ff; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #0073aa;"><?php echo $today_orders; ?></div>
+ <div style="font-size: 12px;">Today's Orders</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #fff8e1; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #ffb900;"><?php echo $pending_orders; ?></div>
+ <div style="font-size: 12px;">Pending</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #fff8e1; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #ffb900;"><?php echo $partial_orders; ?></div>
+ <div style="font-size: 12px;">Partial</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #e5f7e5; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #46b450;"><?php echo $processing_orders; ?></div>
+ <div style="font-size: 12px;">Processing</div>
+ </div>
+ <div style="text-align: center; padding: 15px; background: #f0f0f0; border-radius: 8px;">
+ <div style="font-size: 24px; font-weight: bold; color: #666;"><?php echo $total_orders; ?></div>
+ <div style="font-size: 12px;">Total Assigned</div>
+ </div>
+ </div>
+ 
+ <div style="text-align: center; margin-top: 10px;">
+ <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders'); ?>" class="button button-primary">
+ View All My Orders
+ </a>
+ </div>
+ <?php
+}
+
+// Quick actions widget
+function moderator_quick_actions_widget() {
+ ?>
+ <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+ <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&status=pending'); ?>" class="button" style="text-align: center; padding: 10px;">
+ View Pending Orders
+ </a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&status=partial'); ?>" class="button" style="text-align: center; padding: 10px;">
+ View Partial Orders
+ </a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&date_filter=today'); ?>" class="button" style="text-align: center; padding: 10px;">
+ Today's Orders
+ </a>
+ <a href="<?php echo admin_url('profile.php'); ?>" class="button" style="text-align: center; padding: 10px;">
+ Edit Profile
+ </a>
+ </div>
+ 
+ <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
+ <p style="margin: 0; font-size: 12px; color: #666;">
+ <strong>Need Help?</strong><br>
+ Contact administrator for any issues with order assignments.
+ </p>
+ </div>
+ <?php
+}
+
+// Remove screen options and help tabs for moderators
+add_action('admin_head', 'remove_screen_options_for_moderators');
+
+function remove_screen_options_for_moderators() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ echo '<style>#screen-options-link-wrap { display: none !important; }</style>';
+ }
+}
+// Add custom CSS for moderator admin - ENHANCED
+add_action('admin_head', 'moderator_admin_custom_css');
+
+function moderator_admin_custom_css() {
+ $current_user = wp_get_current_user();
+ 
+ if (in_array('moderator', $current_user->roles)) {
+ ?>
+ <style>
+ /* Hide ALL WooCommerce and unnecessary elements */
+ #woocommerce_dashboard_status,
+ #wc_admin_dashboard_setup,
+ #dashboard_woocommerce_setup,
+ #ecommerce_dashboard_widget,
+ .woocommerce-message,
+ .woocommerce-setup-wrapper,
+ .wc-setup,
+ #wpadminbar #wp-admin-bar-woocommerce,
+ #wpadminbar #wp-admin-bar-wc-admin,
+ #wpadminbar #wp-admin-bar-new-content,
+ #wpadminbar #wp-admin-bar-comments,
+ #wpadminbar #wp-admin-bar-updates,
+ #wpadminbar #wp-admin-bar-search,
+ .welcome-panel,
+ #dashboard-widgets-wrap .welcome-panel,
+ #screen-meta-links,
+ #contextual-help-link-wrap,
+ .woocommerce-layout__header,
+ .woocommerce-page,
+ .post-type-shop_order #wpbody-content .wrap h1,
+ .post-type-product #wpbody-content .wrap h1 {
+ display: none !important;
+ }
+ 
+ /* Custom styling for moderator dashboard */
+ .moderator-dashboard-welcome {
+ background: #f0f6ff;
+ padding: 20px;
+ border-radius: 8px;
+ margin: 20px 0;
+ border-left: 4px solid #0073aa;
+ }
+ 
+ /* Clean dashboard layout */
+ #dashboard-widgets-wrap {
+ padding: 10px;
+ }
+ 
+ .postbox {
+ border-radius: 8px;
+ border: 1px solid #ccd0d4;
+ }
+ 
+ .postbox .hndle {
+ background: #f8f9fa;
+ border-bottom: 1px solid #ccd0d4;
+ font-size: 14px;
+ font-weight: 600;
+ }
+ #moderator_recent_orders.postbox .inside {
+ padding: 10px !important;
+ }
+ /* Simplify the admin menu */
+ #adminmenuwrap {
+ width: 160px;
+ }
+ #adminmenu li a {
+ font-size: 14px;
+ padding: 8px 12px;
+ }
+ 
+ /* Hide update notifications */
+ .update-nag,
+ .notice:not(.moderator-notice) {
+ display: none !important;
+ }
+ 
+ /* Ensure our widgets are prominent */
+ #moderator_orders_widget .inside,
+ #moderator_quick_actions .inside,
+ #moderator_recent_orders .inside {
+ padding: 0 !important;
+ margin: 0 !important;
+ }
+ </style>
+ <?php
+ }
+}
+
+
+// Custom welcome panel for moderators
+add_action('admin_notices', 'moderator_welcome_panel');
+
+function moderator_welcome_panel() {
+ $current_user = wp_get_current_user();
+ $current_screen = get_current_screen();
+ 
+ if (in_array('moderator', $current_user->roles) && $current_screen->id === 'dashboard') {
+ ?>
+ <div class="moderator-dashboard-welcome">
+ <h2> Welcome, <?php echo $current_user->display_name; ?>!</h2>
+ <p>You are logged in as a <strong>Moderator</strong>. Here's what you can do:</p>
+ <ul>
+ <li> <strong>View and manage</strong> your assigned orders in "My Orders"</li>
+ <li> <strong>Update order status</strong> and track order progress</li>
+ <li> <strong>Update your profile</strong> information</li>
+ </ul>
+ <p>Use the quick action buttons above to get started!</p>
+ </div>
+ <?php
+ }
+}
+
+// Now the COMPLETE working solution:
+
+function moderator_reassign_orders_page() {
+ // Get assigned roles
+ $assigned_roles = aoam_get_assigned_roles();
+ 
+ // Process form submission
+ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reassign_orders'])) {
+ $result = process_reassignment_form();
+ 
+ if ($result['success']) {
+ echo '<div class="notice notice-success is-dismissible">';
+ echo '<p>' . $result['message'] . '</p>';
+ if (isset($result['details'])) {
+ echo '<pre style="background: #f8f9fa; padding: 10px; margin: 10px 0;">' . $result['details'] . '</pre>';
+ }
+ echo '</div>';
+ } else {
+ echo '<div class="notice notice-error is-dismissible">';
+ echo '<p>' . $result['message'] . '</p>';
+ if (isset($result['debug'])) {
+ echo '<pre style="background: #fff5f5; padding: 10px; margin: 10px 0;">' . $result['debug'] . '</pre>';
+ }
+ echo '</div>';
+ }
+ }
+ 
+ // Get users
+ $all_users = get_users(array(
+ 'role__in' => $assigned_roles,
+ 'orderby' => 'display_name',
+ 'order' => 'ASC',
+ 'number' => -1
+ ));
+ 
+ $active_users = array();
+ $inactive_users = array();
+ 
+ foreach ($all_users as $user) {
+ $status = get_user_meta($user->ID, 'moderator_status', true);
+ $user_data = array(
+ 'ID' => $user->ID,
+ 'display_name' => $user->display_name,
+ 'user_email' => $user->user_email,
+ 'sequence' => get_user_meta($user->ID, 'moderator_sequence', true)
+ );
+ 
+ if ($status === 'inactive') {
+ $inactive_users[] = $user_data;
+ } else {
+ $active_users[] = $user_data;
+ }
+ }
+ 
+ // Get shift settings
+ $shift_settings = aoam_get_shift_settings();
+ 
+ // Order statuses
+ $order_status_options = array(
+ 'pending' => 'Pending',
+ 'partial' => 'Partial', 
+ 'processing' => 'Processing',
+ 'on-hold' => 'On Hold'
+ );
+ ?>
+ 
+ <div class="wrap">
+ <h1> Reassign Orders - Working Version</h1>
+ 
+ <!-- Navigation -->
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo admin_url('admin.php?page=moderator-settings'); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-recent-assignments'); ?>" class="nav-tab">Recent Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab nav-tab-active">Reassign</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ </div>
+
+ <div class="card">
+ <h2> Bulk Order Reassignment</h2>
+ <p>Transfer orders from inactive users to active users.</p>
+ 
+ <!-- Hidden form for actual submission -->
+ <form method="post" id="reassign-main-form" style="display: none;">
+ <?php wp_nonce_field('reassign_orders_main', 'reassign_nonce_main'); ?>
+ <input type="hidden" name="inactive_user_data" id="inactive_user_data">
+ <input type="hidden" name="active_users_data" id="active_users_data">
+ <input type="hidden" name="order_statuses_data" id="order_statuses_data">
+ <input type="hidden" name="selected_shifts_data" id="selected_shifts_data">
+ <input type="submit" name="reassign_orders" id="reassign_orders_submit">
+ </form>
+ 
+ <!-- Step 1: Select Inactive User -->
+ <div class="reassign-step" id="step-1">
+ <h3><span class="step-number">1</span> Select Inactive User</h3>
+ 
+ <?php if (empty($inactive_users)): ?>
+ <div class="notice notice-warning">
+ <p>No inactive users found. Deactivate users first from "Sequence & Status" page.</p>
+ <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="button">
+ Go to Sequence & Status
+ </a>
+ </div>
+ <?php else: ?>
+ <div class="user-grid">
+ <?php foreach ($inactive_users as $user): 
+ $order_count = count_user_orders($user['ID']);
+ $status_counts = get_user_order_status_counts($user['ID']);
+ ?>
+ <div class="user-card inactive-user-card" data-user-id="<?php echo $user['ID']; ?>">
+ <div class="user-card-header">
+ <div class="user-avatar" style="background: #dc3232;position: relative;border-radius: 50px;overflow: hidden;">
+ <img alt="" src="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g" srcset="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g 2x" class="avatar avatar-50 photo" height="50" width="50" decoding="async">
+ <span class="inactiveuser" style="position: absolute; right: 3px;top: 6px;font-size: 12px;"></span>
+ </div>
+ <div class="user-info">
+ <h4><?php echo esc_html($user['display_name']); ?></h4>
+ <p class="user-meta">User <?php echo $user['sequence']; ?> <?php echo esc_html($user['user_email']); ?></p>
+ </div>
+ </div>
+ 
+ <button type="button" class="button button-primary select-inactive-btn" 
+ data-user-id="<?php echo $user['ID']; ?>"
+ data-user-name="<?php echo esc_attr($user['display_name']); ?>">
+ Select This Inactive User
+ </button>
+ </div>
+ <?php endforeach; ?>
+ </div>
+ <?php endif; ?>
+ </div>
+ 
+ <!-- Step 2: Select Active Users -->
+ <div class="reassign-step" id="step-2" style="display: none;">
+ <h3><span class="step-number">2</span> Select Active Users</h3>
+ <p>Choose who will receive the reassigned orders:</p>
+ 
+ <div class="user-grid">
+ <?php foreach ($active_users as $user): ?>
+ <div class="user-card active-user-card">
+ <div class="user-card-header">
+ <div class="user-avatar" style="background: #46b450;"><div class="user-avatar" style="background: #dc3232;position: relative;border-radius: 50px;overflow: hidden;">
+ <img alt="" src="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g" srcset="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g 2x" class="avatar avatar-50 photo" height="50" width="50" decoding="async">
+ <span class="inactiveuser" style="position: absolute; right: 3px;top: 6px;font-size: 12px;"></span>
+ </div></div>
+ <div class="user-info">
+ <h4><?php echo esc_html($user['display_name']); ?></h4>
+ <p class="user-meta">User <?php echo $user['sequence']; ?></p>
+ </div>
+ </div>
+ 
+ <div class="user-actions">
+ <label class="checkbox-container">
+ <input type="checkbox" class="active-user-checkbox" value="<?php echo $user['ID']; ?>">
+ <span class="checkmark"></span>
+ Select User
+ </label>
+ </div>
+ </div>
+ <?php endforeach; ?>
+ </div>
+ 
+ <div style="margin-top: 20px;">
+ <button type="button" class="button" id="select-all-active-btn">Select All</button>
+ <button type="button" class="button" id="deselect-all-active-btn">Deselect All</button>
+ </div>
+ 
+ <div style="margin-top: 30px; text-align: right;">
+ <button type="button" class="button button-secondary" onclick="goToStep(1)"> Back</button>
+ <button type="button" class="button button-primary" onclick="goToStep(3)">Next </button>
+ </div>
+ </div>
+ 
+ <!-- Step 3: Select Order Statuses -->
+ <div class="reassign-step" id="step-3" style="display: none;">
+ <h3><span class="step-number">3</span> Select Order Statuses</h3>
+ <p>Choose which status orders to reassign:</p>
+ 
+ <div class="status-grid">
+ <?php foreach ($order_status_options as $status_key => $status_name): ?>
+ <div class="status-card">
+ <label class="checkbox-container">
+ <input type="checkbox" class="status-checkbox" value="<?php echo $status_key; ?>">
+ <span class="checkmark"></span>
+ <div class="status-content">
+ <div class="status-name" style="color: <?php echo get_status_color_simple($status_key); ?>;">
+ <?php echo $status_name; ?>
+ </div>
+ </div>
+ </label>
+ </div>
+ <?php endforeach; ?>
+ </div>
+ 
+ <div style="margin-top: 20px;">
+ <button type="button" class="button" id="select-all-status-btn">Select All</button>
+ <button type="button" class="button" id="deselect-all-status-btn">Deselect All</button>
+ </div>
+ 
+ <div style="margin-top: 30px; text-align: right;">
+ <button type="button" class="button button-secondary" onclick="goToStep(2)"> Back</button>
+ <button type="button" class="button button-primary" onclick="goToStep(4)">Next </button>
+ </div>
+ </div>
+ 
+ <!-- Step 4: Preview & Confirm -->
+ <div class="reassign-step" id="step-4" style="display: none;">
+ <h3><span class="step-number">4</span> Preview & Confirm</h3>
+ 
+ <div id="preview-container">
+ <div style="text-align: center; padding: 40px;">
+ <div class="spinner is-active" style="float: none;"></div>
+ <p>Loading preview...</p>
+ </div>
+ 
+ <div style="margin-top: 20px;">
+ <button type="button" class="button button-secondary" onclick="goToStep(3)">
+ Go Back
+ </button>
+ </div>
+ </div>
+ 
+ <div id="confirmation-section" style="display: none;">
+ <div style="padding: 20px; background: #fff8e1; border-radius: 8px; margin: 20px 0;">
+ <h4 style="margin-top: 0;"> Final Confirmation</h4>
+ <p>Are you sure you want to proceed with the reassignment?</p>
+ <p><strong>This action cannot be undone automatically.</strong></p>
+ 
+ <div style="margin-top: 20px;">
+ <button type="button" class="button button-primary" id="confirm-reassign-btn">
+ Yes, Reassign Orders
+ </button>
+ <button type="button" class="button button-secondary" onclick="goToStep(3)">
+ Go Back
+ </button>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ 
+ <style>
+ .card {
+ margin: 20px 0;
+ padding: 30px;
+ background: #fff;
+ border: 1px solid #ccd0d4;
+ border-radius: 10px;
+ box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+ max-width: 100%;
+ }
+ 
+ .reassign-step {
+ padding: 30px;
+ border: 2px solid #e0e0e0;
+ border-radius: 10px;
+ margin: 30px 0;
+ background: #fafafa;
+ }
+ 
+ .step-number {
+ display: inline-block;
+ width: 30px;
+ height: 30px;
+ background: #0073aa;
+ color: white;
+ border-radius: 50%;
+ text-align: center;
+ line-height: 30px;
+ margin-right: 10px;
+ }
+ 
+ .user-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+ gap: 20px;
+ margin: 20px 0;
+ }
+ 
+ .user-card {
+ background: white;
+ border: 2px solid #ddd;
+ border-radius: 8px;
+ padding: 20px;
+ transition: all 0.3s;
+ }
+ 
+ .user-card:hover {
+ border-color: #0073aa;
+ transform: translateY(-2px);
+ box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+ }
+ 
+ .user-card.selected {
+ border-color: #46b450;
+ background: #f8fff8;
+ }
+ 
+ .user-card-header {
+ display: flex;
+ align-items: center;
+ gap: 15px;
+ margin-bottom: 15px;
+ }
+ 
+ .user-avatar {
+ width: 50px;
+ height: 50px;
+ border-radius: 50%;
+ display: flex;
+ align-items: center;
+ justify-content: center;
+ font-size: 20px;
+ font-weight: bold;
+ color: white;
+ }
+ 
+ .user-info h4 {
+ margin: 0 0 5px 0;
+ font-size: 18px;
+ }
+ 
+ .user-meta {
+ margin: 0;
+ color: #666;
+ font-size: 13px;
+ }
+ 
+ .user-stats {
+ margin: 15px 0;
+ padding: 15px;
+ background: #f8f9fa;
+ border-radius: 6px;
+ }
+ 
+ .stat-total {
+ text-align: center;
+ margin-bottom: 10px;
+ }
+ 
+ .stat-number {
+ font-size: 28px;
+ font-weight: bold;
+ color: #0073aa;
+ display: block;
+ }
+ 
+ .stat-label {
+ font-size: 12px;
+ color: #666;
+ text-transform: uppercase;
+ letter-spacing: 1px;
+ }
+ 
+ .status-badges {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 5px;
+ justify-content: center;
+ }
+ 
+ .status-badge {
+ padding: 3px 8px;
+ border-radius: 4px;
+ font-size: 11px;
+ color: white;
+ font-weight: bold;
+ }
+ 
+ .status-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+ gap: 15px;
+ margin: 20px 0;
+ }
+ 
+ .status-card {
+ padding: 15px;
+ border: 2px solid #ddd;
+ border-radius: 8px;
+ background: white;
+ cursor: pointer;
+ }
+ 
+ .status-card:hover {
+ border-color: #0073aa;
+ }
+ 
+ .status-content {
+ text-align: center;
+ }
+ 
+ .status-name {
+ font-size: 16px;
+ font-weight: bold;
+ }
+ 
+ .checkbox-container {
+ display: block;
+ position: relative;
+ padding-left: 35px;
+ cursor: pointer;
+ user-select: none;
+ }
+ 
+ .checkbox-container input {
+ position: absolute;
+ opacity: 0;
+ cursor: pointer;
+ height: 0;
+ width: 0;
+ }
+ 
+ .checkmark {
+ position: absolute;
+ top: 0;
+ left: 0;
+ height: 25px;
+ width: 25px;
+ background-color: #eee;
+ border-radius: 4px;
+ }
+ 
+ .checkbox-container:hover input ~ .checkmark {
+ background-color: #ccc;
+ }
+ 
+ .checkbox-container input:checked ~ .checkmark {
+ background-color: #46b450;
+ }
+ 
+ .checkmark:after {
+ content: "";
+ position: absolute;
+ display: none;
+ }
+ 
+ .checkbox-container input:checked ~ .checkmark:after {
+ display: block;
+ }
+ 
+ .checkbox-container .checkmark:after {
+ left: 9px;
+ top: 5px;
+ width: 7px;
+ height: 12px;
+ border: solid white;
+ border-width: 0 3px 3px 0;
+ transform: rotate(45deg);
+ }
+ 
+ .nav-tab-wrapper { margin: 20px 0; }
+ .nav-tab { 
+ padding: 12px 20px; 
+ margin: 0 5px 0 0; 
+ border: 1px solid #ccd0d4;
+ border-bottom: none;
+ background: #f0f0f0;
+ }
+ .nav-tab-active { 
+ background: #0073aa; 
+ color: white; 
+ border-bottom: 1px solid #0073aa;
+ }
+ </style>
+ 
+ <script>
+ // Global variables to store selections
+ var reassignData = {
+ inactive_user: null,
+ active_users: [],
+ order_statuses: [],
+ selected_shifts: []
+};
+
+jQuery(document).ready(function($) {
+ // Use $ inside this function only
+ 
+ // Step 1: Select inactive user
+ $('.select-inactive-btn').click(function() {
+ var userId = $(this).data('user-id');
+ var userName = $(this).data('user-name');
+ 
+ reassignData.inactive_user = userId;
+ 
+ // Update UI
+ $('.inactive-user-card').removeClass('selected');
+ $(this).closest('.inactive-user-card').addClass('selected');
+ 
+ // Go to next step
+ goToStep(2);
+ });
+ 
+ // Step 2: Active users selection
+ $('.active-user-checkbox').change(function() {
+ updateActiveUsersList();
+ });
+ 
+ $('#select-all-active-btn').click(function() {
+ $('.active-user-checkbox').prop('checked', true).trigger('change');
+ });
+ 
+ $('#deselect-all-active-btn').click(function() {
+ $('.active-user-checkbox').prop('checked', false).trigger('change');
+ });
+ 
+ // Step 3: Status selection
+ $('.status-checkbox').change(function() {
+ updateStatusList();
+ });
+ 
+ $('#select-all-status-btn').click(function() {
+ $('.status-checkbox').prop('checked', true).trigger('change');
+ });
+ 
+ $('#deselect-all-status-btn').click(function() {
+ $('.status-checkbox').prop('checked', false).trigger('change');
+ });
+ 
+ // Step 4: Preview
+ $(document).on('click', '#confirm-reassign-btn', function() {
+ submitReassignment();
+ });
+});
+
+function goToStep(stepNumber) {
+ // Use jQuery instead of $
+ jQuery('.reassign-step').hide();
+ jQuery('#step-' + stepNumber).show();
+ 
+ // Load preview for step 4
+ if (stepNumber === 4) {
+ loadPreview();
+ }
+}
+
+function updateActiveUsersList() {
+ reassignData.active_users = [];
+ jQuery('.active-user-checkbox:checked').each(function() {
+ reassignData.active_users.push(jQuery(this).val());
+ });
+}
+
+function updateStatusList() {
+ reassignData.order_statuses = [];
+ jQuery('.status-checkbox:checked').each(function() {
+ reassignData.order_statuses.push(jQuery(this).val());
+ });
+}
+
+function loadPreview() {
+ if (!reassignData.inactive_user || reassignData.active_users.length === 0 || reassignData.order_statuses.length === 0) {
+ jQuery('#preview-container').html('<div style="text-align: center; padding: 40px; color: #cc1818;"><p>Please complete all previous steps.</p></div>');
+ return;
+ }
+ 
+ jQuery('#preview-container').html('<div style="text-align: center; padding: 40px;"><div class="spinner is-active" style="float: none;"></div><p>Loading preview...</p></div>');
+ 
+ jQuery.ajax({
+ url: '<?php echo admin_url('admin-ajax.php'); ?>',
+ type: 'POST',
+ data: {
+ action: 'get_reassign_preview_final',
+ inactive_user: reassignData.inactive_user,
+ active_users: reassignData.active_users,
+ order_statuses: reassignData.order_statuses,
+ nonce: '<?php echo wp_create_nonce('reassign_preview_final'); ?>'
+ },
+ success: function(response) {
+ if (response.success) {
+ jQuery('#preview-container').html(response.data);
+ jQuery('#confirmation-section').show();
+ } else {
+ jQuery('#preview-container').html('<div style="color: #cc1818; padding: 20px; text-align: center;">Error: ' + response.data + '</div>');
+ }
+ },
+ error: function() {
+ jQuery('#preview-container').html('<div style="color: #cc1818; padding: 20px; text-align: center;">Error loading preview</div>');
+ }
+ });
+}
+
+function submitReassignment() {
+ if (!confirm('Are you sure you want to reassign orders? This action cannot be undone.')) {
+ return;
+ }
+ 
+ // Show loading
+ jQuery('#confirm-reassign-btn').html('<span class="spinner is-active"></span> Processing...').prop('disabled', true);
+ 
+ // Prepare data for form submission
+ jQuery('#inactive_user_data').val(JSON.stringify({
+ id: reassignData.inactive_user,
+ users: reassignData.active_users,
+ statuses: reassignData.order_statuses,
+ shifts: reassignData.selected_shifts,
+ timestamp: Date.now()
+ }));
+ 
+ // Submit the form
+ jQuery('#reassign_orders_submit').click();
+}
+
+function get_status_color_simple(status) {
+ var colors = {
+ 'pending': '#ffb900',
+ 'partial': '#777',
+ 'processing': '#00a0d2',
+ 'on-hold': '#cc1818',
+ 'completed': '#46b450'
+ };
+ return colors[status] || '#666';
+}
+ </script>
+ <?php
+}
+
+// Helper functions
+function count_user_orders($user_id) {
+ global $wpdb;
+ 
+ // Try multiple meta keys
+ $meta_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ 
+ foreach ($meta_keys as $key) {
+ $count = $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(*) 
+ FROM {$wpdb->postmeta} 
+ WHERE meta_key = %s 
+ AND meta_value = %d
+ ", $key, $user_id));
+ 
+ if ($count > 0) {
+ return $count;
+ }
+ }
+ 
+ return 0;
+}
+
+function get_user_order_status_counts($user_id) {
+ global $wpdb;
+ 
+ $meta_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ 
+ foreach ($meta_keys as $key) {
+ $results = $wpdb->get_results($wpdb->prepare("
+ SELECT 
+ REPLACE(p.post_status, 'wc-', '') as status,
+ COUNT(*) as count
+ FROM {$wpdb->postmeta} pm
+ INNER JOIN {$wpdb->posts} p ON pm.post_id = p.ID
+ WHERE pm.meta_key = %s 
+ AND pm.meta_value = %d
+ AND p.post_type = 'shop_order'
+ GROUP BY p.post_status
+ ", $key, $user_id));
+ 
+ if (!empty($results)) {
+ $status_counts = array();
+ foreach ($results as $row) {
+ $status_counts[$row->status] = $row->count;
+ }
+ return $status_counts;
+ }
+ }
+ 
+ return array();
+}
+
+function get_status_color_simple($status) {
+ $colors = array(
+ 'pending' => '#ffb900',
+ 'partial' => '#777',
+ 'processing' => '#00a0d2',
+ 'on-hold' => '#cc1818',
+ 'completed' => '#46b450'
+ );
+ 
+ return isset($colors[$status]) ? $colors[$status] : '#666';
+}
+
+// AJAX handler for preview
+add_action('wp_ajax_get_reassign_preview_final', 'get_reassign_preview_final_ajax');
+
+function get_reassign_preview_final_ajax() {
+ if (!wp_verify_nonce($_POST['nonce'], 'reassign_preview_final')) {
+ wp_send_json_error('Security check failed');
+ }
+ 
+ $inactive_user_id = intval($_POST['inactive_user']);
+ $active_users = isset($_POST['active_users']) ? array_map('intval', $_POST['active_users']) : array();
+ $order_statuses = isset($_POST['order_statuses']) ? array_map('sanitize_text_field', $_POST['order_statuses']) : array();
+ 
+ // Get orders
+ $orders = get_orders_for_reassignment_final($inactive_user_id, $order_statuses);
+ 
+ if (empty($orders)) {
+ $html = '<div style="text-align: center; padding: 40px;">';
+ $html .= '<div style="font-size: 48px; color: #cc1818; margin-bottom: 20px;"></div>';
+ $html .= '<h3>No Orders Found</h3>';
+ $html .= '<p>No orders match the selected criteria.</p>';
+ 
+ // Debug info
+ $inactive_user = get_userdata($inactive_user_id);
+ $html .= '<div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-top: 20px; text-align: left;">';
+ $html .= '<p><strong>User:</strong> ' . esc_html($inactive_user->display_name) . '</p>';
+ $html .= '<p><strong>Statuses:</strong> ' . esc_html(implode(', ', $order_statuses)) . '</p>';
+ $html .= '</div>';
+ 
+ $html .= '</div>';
+ 
+ wp_send_json_success($html);
+ return;
+ }
+ 
+ // Generate preview
+ $inactive_user = get_userdata($inactive_user_id);
+ 
+ $html = '<div class="final-preview">';
+ 
+ // Summary
+ $html .= '<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 10px; color: white; margin-bottom: 25px;">';
+ $html .= '<h3 style="color: white; margin-top: 0;"> Reassignment Summary</h3>';
+ $html .= '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">';
+ $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($orders) . '</div><div>Total Orders</div></div>';
+ $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($active_users) . '</div><div>Active Users</div></div>';
+ $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($order_statuses) . '</div><div>Statuses</div></div>';
+ $html .= '</div>';
+ $html .= '</div>';
+ 
+ // Orders by status
+ $status_counts = array();
+ foreach ($orders as $order) {
+ $status = $order->get_status();
+ if (!isset($status_counts[$status])) {
+ $status_counts[$status] = 0;
+ }
+ $status_counts[$status]++;
+ }
+ 
+ $html .= '<h4> Orders by Status</h4>';
+ $html .= '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 15px 0 25px 0;">';
+ foreach ($status_counts as $status => $count) {
+ $color = get_status_color_simple($status);
+ $html .= '<div style="padding: 10px 15px; background: ' . $color . '20; border-left: 4px solid ' . $color . '; border-radius: 4px;">';
+ $html .= '<div style="font-size: 18px; font-weight: bold; color: ' . $color . ';">' . $count . '</div>';
+ $html .= '<div style="font-size: 12px; color: ' . $color . ';">' . ucfirst($status) . '</div>';
+ $html .= '</div>';
+ }
+ $html .= '</div>';
+ 
+ // Sample orders
+ $html .= '<h4> Sample Orders</h4>';
+ $html .= '<div style="max-height: 250px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; margin: 15px 0 25px 0;">';
+ 
+ $sample_count = 0;
+ foreach ($orders as $order) {
+ if ($sample_count >= 5) break;
+ 
+ $status = $order->get_status();
+ $color = get_status_color_simple($status);
+ 
+ $html .= '<div style="padding: 12px 15px; border-bottom: 1px solid #eee; background: white;">';
+ $html .= '<div style="display: flex; justify-content: space-between; align-items: center;">';
+ $html .= '<div>';
+ $html .= '<strong>Order #' . $order->get_id() . '</strong>';
+ $html .= '<div style="font-size: 13px; color: #666;">';
+ $html .= aoam_format_order_local_date($order, 'M j, Y') . ' ';
+ $html .= esc_html($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()) . ' ';
+ $html .= $order->get_formatted_order_total();
+ $html .= '</div>';
+ $html .= '</div>';
+ $html .= '<span style="padding: 5px 10px; background: ' . $color . '20; color: ' . $color . '; border-radius: 4px; font-size: 12px; font-weight: bold;">';
+ $html .= ucfirst($status);
+ $html .= '</span>';
+ $html .= '</div>';
+ $html .= '</div>';
+ 
+ $sample_count++;
+ }
+ 
+ if (count($orders) > 5) {
+ $html .= '<div style="padding: 10px; text-align: center; color: #666; font-style: italic;">';
+ $html .= '+ ' . (count($orders) - 5) . ' more orders';
+ $html .= '</div>';
+ }
+ 
+ $html .= '</div>';
+ 
+ $html .= '</div>'; // Close final-preview
+ 
+ wp_send_json_success($html);
+}
+
+// Function to get orders
+function get_orders_for_reassignment_final($user_id, $statuses) {
+ // Method 1: Direct query with all possible meta keys
+ global $wpdb;
+ 
+ $meta_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ 
+ foreach ($meta_keys as $key) {
+ // Get order IDs with this meta key
+ $order_ids = $wpdb->get_col($wpdb->prepare("
+ SELECT post_id 
+ FROM {$wpdb->postmeta} 
+ WHERE meta_key = %s 
+ AND meta_value = %d
+ ", $key, $user_id));
+ 
+ if (!empty($order_ids)) {
+ // Filter by status
+ $filtered_ids = array();
+ foreach ($order_ids as $order_id) {
+ $order = wc_get_order($order_id);
+ if ($order && in_array($order->get_status(), $statuses)) {
+ $filtered_ids[] = $order_id;
+ }
+ }
+ 
+ // Convert to WC_Order objects
+ $orders = array();
+ foreach ($filtered_ids as $order_id) {
+ $order = wc_get_order($order_id);
+ if ($order) {
+ $orders[] = $order;
+ }
+ }
+ 
+ return $orders;
+ }
+ }
+ 
+ return array();
+}
+
+// Form submission handler
+function process_reassignment_form() {
+ // Verify nonce
+ if (!isset($_POST['reassign_nonce_main']) || !wp_verify_nonce($_POST['reassign_nonce_main'], 'reassign_orders_main')) {
+ return array(
+ 'success' => false,
+ 'message' => 'Security check failed. Please try again.'
+ );
+ }
+ 
+ // Get and decode data
+ if (empty($_POST['inactive_user_data'])) {
+ return array(
+ 'success' => false,
+ 'message' => 'No data received. Please fill the form again.'
+ );
+ }
+ 
+ $data = json_decode(stripslashes($_POST['inactive_user_data']), true);
+ 
+ if (!$data) {
+ return array(
+ 'success' => false,
+ 'message' => 'Invalid data format. Please try again.'
+ );
+ }
+ 
+ $inactive_user_id = isset($data['id']) ? intval($data['id']) : 0;
+ $active_users = isset($data['users']) ? array_map('intval', $data['users']) : array();
+ $order_statuses = isset($data['statuses']) ? array_map('sanitize_text_field', $data['statuses']) : array();
+ 
+ // Validation
+ if (!$inactive_user_id) {
+ return array(
+ 'success' => false,
+ 'message' => 'No inactive user selected.'
+ );
+ }
+ 
+ if (empty($active_users)) {
+ return array(
+ 'success' => false,
+ 'message' => 'No active users selected.'
+ );
+ }
+ 
+ if (empty($order_statuses)) {
+ return array(
+ 'success' => false,
+ 'message' => 'No order statuses selected.'
+ );
+ }
+ 
+ // Get orders
+ $orders = get_orders_for_reassignment_final($inactive_user_id, $order_statuses);
+ 
+ if (empty($orders)) {
+ return array(
+ 'success' => false,
+ 'message' => 'No orders found to reassign with the selected criteria.',
+ 'debug' => "User ID: $inactive_user_id\nStatuses: " . implode(', ', $order_statuses) . "\nTotal orders in DB: " . count_user_orders($inactive_user_id)
+ );
+ }
+ 
+ // Process reassignment
+ $result = process_bulk_reassignment($inactive_user_id, $active_users, $order_statuses, $orders);
+ 
+ return $result;
+}
+
+// Bulk reassignment processor
+function process_bulk_reassignment($inactive_user_id, $active_users, $order_statuses, $orders) {
+ $inactive_user = get_userdata($inactive_user_id);
+ 
+ if (!$inactive_user) {
+ return array(
+ 'success' => false,
+ 'message' => 'Inactive user not found.'
+ );
+ }
+ 
+ // Sort active users by sequence
+ usort($active_users, function($a, $b) {
+ $seq_a = get_user_meta($a, 'moderator_sequence', true) ?: 999;
+ $seq_b = get_user_meta($b, 'moderator_sequence', true) ?: 999;
+ return $seq_a - $seq_b;
+ });
+ 
+ // Initialize
+ $reassigned = 0;
+ $failed = 0;
+ $distribution = array_fill_keys($active_users, 0);
+ $current_index = 0;
+ 
+ // Process each order
+ foreach ($orders as $order) {
+ $new_user_id = $active_users[$current_index];
+ $new_user = get_userdata($new_user_id);
+ 
+ if ($new_user) {
+ // Find the correct meta key
+ $meta_key = find_assignment_meta_key($order->get_id(), $inactive_user_id);
+ 
+ if ($meta_key) {
+ // Update assignment
+ update_post_meta($order->get_id(), $meta_key, $new_user_id);
+ update_post_meta($order->get_id(), '_assigned_moderator_name', $new_user->display_name);
+ 
+ // Update sequence
+ $new_sequence = get_user_meta($new_user_id, 'moderator_sequence', true);
+ if ($new_sequence) {
+ update_post_meta($order->get_id(), '_assigned_moderator_sequence', $new_sequence);
+ }
+ 
+ // Add order note
+ $order_note = sprintf(
+ ' Order reassigned from %s to %s via bulk reassignment tool.',
+ $inactive_user->display_name,
+ $new_user->display_name
+ );
+ 
+ $order->add_order_note($order_note);
+ 
+ $reassigned++;
+ $distribution[$new_user_id]++;
+ 
+ // Move to next user
+ $current_index = ($current_index + 1) % count($active_users);
+ } else {
+ $failed++;
+ }
+ } else {
+ $failed++;
+ }
+ }
+ 
+ // Prepare response
+ if ($reassigned > 0) {
+ $message = " Successfully reassigned $reassigned order(s) from {$inactive_user->display_name}.\n\n";
+ 
+ $details = "Distribution:\n";
+ foreach ($distribution as $user_id => $count) {
+ if ($count > 0) {
+ $user = get_userdata($user_id);
+ $details .= " {$user->display_name}: {$count} order(s)\n";
+ }
+ }
+ 
+ if ($failed > 0) {
+ $details .= "\nFailed to reassign: {$failed} order(s)";
+ }
+ 
+ return array(
+ 'success' => true,
+ 'message' => $message,
+ 'details' => $details
+ );
+ } else {
+ return array(
+ 'success' => false,
+ 'message' => ' Failed to reassign any orders.',
+ 'debug' => "Total orders: " . count($orders) . "\nActive users: " . count($active_users)
+ );
+ }
+}
+
+// Helper to find correct meta key
+function find_assignment_meta_key($order_id, $user_id) {
+ $possible_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ 
+ foreach ($possible_keys as $key) {
+ $assigned_user = get_post_meta($order_id, $key, true);
+ if ($assigned_user == $user_id) {
+ return $key;
+ }
+ }
+ 
+ return '_assigned_moderator_id'; // Default
+}
