@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Auto Order Assign To Moderator
+ * Plugin Name: WooCommerce Order Auto Assign To Moderator
  * Plugin URI: https://shirinshoes.com/
  * Description: Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing.
  * Version: 1.1.3
@@ -27,7 +27,7 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 function aoam_woocommerce_missing_notice() {
  ?>
  <div class="error">
- <p><?php _e('Auto Order Assign To Moderator requires WooCommerce to be installed and active.', 'auto-order-assign-moderator'); ?></p>
+ <p><?php _e('WooCommerce Order Auto Assign To Moderator requires WooCommerce to be installed and active.', 'auto-order-assign-moderator'); ?></p>
  </div>
  <?php
 }
