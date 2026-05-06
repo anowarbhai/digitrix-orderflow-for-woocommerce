@@ -4770,6 +4770,45 @@ function simple_moderator_orders_page() {
  loadSimpleOrders(collectParamsFromForm($(this).closest('form')), true);
  });
 
+ $app.on('change', '.mobile-status-form select[name="order_status"]', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ var $select = $(this);
+ var $form = $select.closest('form');
+ var orderId = $form.find('input[name="order_id"]').val();
+ var newStatus = $select.val();
+ if (!orderId || !newStatus) {
+ return;
+ }
+ $select.prop('disabled', true);
+ $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: {
+ action: 'update_order_status_ajax',
+ status_update_nonce: '<?php echo esc_js(wp_create_nonce('update_order_status')); ?>',
+ order_id: orderId,
+ order_status: newStatus
+ }
+ }).done(function(response) {
+ if (response && response.success) {
+ if (window.aoamHideSimpleOrderIfFiltered) {
+ window.aoamHideSimpleOrderIfFiltered(orderId, newStatus);
+ }
+ if (window.aoamRefreshSimpleOrdersAfterUpdate) {
+ window.aoamRefreshSimpleOrdersAfterUpdate();
+ }
+ } else {
+ alert(response && response.data ? response.data : 'Status update failed');
+ $select.prop('disabled', false);
+ }
+ }).fail(function() {
+ alert('Network error. Please try again.');
+ $select.prop('disabled', false);
+ });
+ });
+
  $app.on('click', '.tablenav-pages a, .phone-search-form a, .search-stats a, .notice a[href*="moderator-simple-orders"]', function(e) {
  var href = $(this).attr('href');
  if (!href) {
@@ -5408,7 +5447,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <?php wp_nonce_field('update_order_status', 'moderator_nonce'); ?>
  <input type="hidden" name="order_id" value="<?php echo esc_attr($order->get_id()); ?>">
  <input type="hidden" name="update_order_status" value="1">
- <select name="order_status" onchange="this.form.submit()">
+ <select name="order_status">
  <option value="pending" <?php selected($order_status, 'pending'); ?>>Pending</option>
  <option value="partial" <?php selected($order_status, 'partial'); ?>>Partial</option>
  <option value="processing" <?php selected($order_status, 'processing'); ?>>Processing</option>
