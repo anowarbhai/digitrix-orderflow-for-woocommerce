@@ -3300,6 +3300,13 @@ function moderator_recent_assignments_page() {
  return target.searchParams;
  }
 
+ function collectParamsFromForm($form) {
+ var params = new URLSearchParams($form.serialize());
+ params.set('page', 'moderator-recent-assignments');
+ params.set('paged', '1');
+ return params;
+ }
+
  function loadRecentAssignments(params, pushUrl) {
  if (request) {
  request.abort();
@@ -3384,13 +3391,20 @@ function moderator_recent_assignments_page() {
 
  $app.on('submit', '.aoam-filter-form', function(e) {
  e.preventDefault();
- var params = new URLSearchParams($(this).serialize());
- params.set('paged', '1');
- loadRecentAssignments(params, true);
+ e.stopImmediatePropagation();
+ loadRecentAssignments(collectParamsFromForm($(this)), true);
  });
 
- $app.on('change', '.aoam-filter-form select', function() {
- $(this).closest('form').trigger('submit');
+ $app.on('change', '.aoam-filter-form select', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
+ });
+
+ $app.on('click', '.aoam-apply-filters', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
  });
 
  $app.on('click', '.tablenav-pages a, .aoam-soft-button, .aoam-reset-filters', function(e) {
@@ -3490,6 +3504,12 @@ function moderator_recent_assignments_page() {
  window.addEventListener('popstate', function() {
  loadRecentAssignments(collectParamsFromUrl(), false);
  });
+
+ document.addEventListener('submit', function(event) {
+ if (event.target && event.target.classList && event.target.classList.contains('aoam-filter-form')) {
+ event.preventDefault();
+ }
+ }, true);
 
  loadRecentAssignments(collectParamsFromUrl(), false);
  });
@@ -3827,7 +3847,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </div>
  </div>
  <div class="assignment-filters">
- <form method="get" class="aoam-filter-form">
+ <form method="get" class="aoam-filter-form" action="<?php echo esc_url(admin_url('admin.php')); ?>">
  <input type="hidden" name="page" value="moderator-recent-assignments">
  
  <div class="filter-group">
@@ -3884,7 +3904,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </div>
  
  <div class="filter-group aoam-filter-actions">
- <button type="submit" class="button button-primary">Apply Filters</button>
+ <button type="button" class="button button-primary aoam-apply-filters">Apply Filters</button>
  <a href="?page=moderator-recent-assignments" class="button button-secondary aoam-reset-filters">Reset Filters</a>
  </div>
  </form>
