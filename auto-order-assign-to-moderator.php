@@ -3461,35 +3461,61 @@ function moderator_recent_assignments_page() {
  ?>
  
  <!-- Results Summary -->
- <div class="card">
+ <div class="aoam-report-panel">
+ <div class="aoam-section-heading">
+ <div>
  <h2>Assignment Results</h2>
- <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 15px 0;">
- <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
- <div style="font-size: 24px; font-weight: bold; color: #0073aa;"><?php echo esc_html($total_orders); ?></div>
- <div>Total Orders</div>
+ <p>Overview of assigned orders with the current filters applied.</p>
  </div>
- <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
- <div style="font-size: 24px; font-weight: bold; color: #46b450;"><?php echo esc_html($today_orders_count); ?></div>
- <div>Today Orders</div>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-recent-assignments')); ?>" class="button aoam-soft-button">Refresh</a>
  </div>
- <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
- <div style="font-size: 24px; font-weight: bold; color: #46b450;"><?php echo esc_html(count($orders)); ?></div>
- <div>Showing</div>
+ <div class="aoam-stats-grid">
+ <div class="aoam-stat-tile aoam-stat-total">
+ <span class="dashicons dashicons-clipboard"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($total_orders)); ?></strong>
+ <small>Total Orders</small>
  </div>
- <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
- <div style="font-size: 24px; font-weight: bold; color: #ffb900;"><?php echo esc_html($total_pages); ?></div>
- <div>Total Pages</div>
  </div>
- <div style="text-align: center; padding: 15px; background: #f0f6ff; border-radius: 8px;">
- <div style="font-size: 24px; font-weight: bold; color: #cc1818;"><?php echo esc_html(count($moderators)); ?></div>
- <div>Total Users</div> <!-- CHANGED: Moderators -> Users -->
+ <div class="aoam-stat-tile aoam-stat-today">
+ <span class="dashicons dashicons-calendar-alt"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($today_orders_count)); ?></strong>
+ <small>Today Orders</small>
+ </div>
+ </div>
+ <div class="aoam-stat-tile aoam-stat-showing">
+ <span class="dashicons dashicons-visibility"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n(count($orders))); ?></strong>
+ <small>Showing Now</small>
+ </div>
+ </div>
+ <div class="aoam-stat-tile aoam-stat-pages">
+ <span class="dashicons dashicons-media-spreadsheet"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($total_pages)); ?></strong>
+ <small>Total Pages</small>
+ </div>
+ </div>
+ <div class="aoam-stat-tile aoam-stat-users">
+ <span class="dashicons dashicons-groups"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n(count($moderators))); ?></strong>
+ <small>Total Users</small>
+ </div>
  </div>
  </div>
  
  <!-- Status Breakdown -->
- <div style="margin-top: 20px;">
+ <div class="aoam-status-panel">
+ <div class="aoam-section-heading aoam-section-heading-small">
+ <div>
  <h3>Order Status Breakdown</h3>
- <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+ <p>Status counts are calculated from the selected source and user filter.</p>
+ </div>
+ </div>
+ <div class="aoam-status-grid">
  <?php foreach ($status_counts as $status => $count): 
  if ($status === 'all') continue;
  if ($count > 0):
@@ -3510,7 +3536,7 @@ function moderator_recent_assignments_page() {
  $moderator_name = $moderator ? $moderator->display_name : 'Unknown';
  $moderator_sequence = get_user_meta($moderator_filter, 'moderator_sequence', true);
  ?>
- <div style="margin-top: 15px; padding: 10px; background: #e7f3ff; border-radius: 4px;">
+ <div class="aoam-active-filter-note">
  <strong>Currently viewing orders for:</strong> 
  <?php echo esc_html($moderator_name); ?>
  <?php if ($moderator_sequence): ?>
@@ -3527,14 +3553,19 @@ function moderator_recent_assignments_page() {
  </div>
 
  <!-- Filters -->
- <div class="card">
+ <div class="aoam-report-panel aoam-filter-panel">
+ <div class="aoam-section-heading">
+ <div>
  <h2>Assignment Filters</h2>
- <div class="assignment-filters" style="padding: 15px; background: #f9f9f9; border-radius: 4px;">
- <form method="get" style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+ <p>Use these controls to narrow the table without loading every order.</p>
+ </div>
+ </div>
+ <div class="assignment-filters">
+ <form method="get" class="aoam-filter-form">
  <input type="hidden" name="page" value="moderator-recent-assignments">
  
  <div class="filter-group">
- <label for="moderator_filter" style="font-weight: bold; margin-right: 5px;">Filter by User:</label> 
+ <label for="moderator_filter">Filter by User</label> 
  <select name="moderator_filter" id="moderator_filter" onchange="this.form.submit()">
  <option value="0">All Users</option> <!-- CHANGED: Moderators -> Users -->
  <?php foreach ($moderators as $mod): 
@@ -3549,7 +3580,7 @@ function moderator_recent_assignments_page() {
  </div>
 
  <div class="filter-group">
- <label for="source_filter" style="font-weight: bold; margin-right: 5px;">Order Source:</label>
+ <label for="source_filter">Order Source</label>
  <select name="source_filter" id="source_filter" onchange="this.form.submit()">
  <option value="all" <?php selected($source_filter, 'all'); ?>>All Sources</option>
  <option value="current" <?php selected($source_filter, 'current'); ?>>Current Site</option>
@@ -3562,7 +3593,7 @@ function moderator_recent_assignments_page() {
  </div>
   
  <div class="filter-group">
- <label for="status_filter" style="font-weight: bold; margin-right: 5px;">Order Status:</label>
+ <label for="status_filter">Order Status</label>
  <select name="status_filter" id="status_filter" onchange="this.form.submit()">
  <option value="all" <?php selected($status_filter, 'all'); ?>>All Statuses</option>
  <option value="pending" <?php selected($status_filter, 'pending'); ?>>Pending</option>
@@ -3577,7 +3608,7 @@ function moderator_recent_assignments_page() {
  </div>
  
  <div class="filter-group">
- <label for="per_page" style="font-weight: bold; margin-right: 5px;">Orders per page:</label>
+ <label for="per_page">Orders per page</label>
  <select name="per_page" id="per_page" onchange="this.form.submit()">
  <option value="10" <?php selected($per_page, 10); ?>>10</option>
  <option value="20" <?php selected($per_page, 20); ?>>20</option>
@@ -3586,7 +3617,7 @@ function moderator_recent_assignments_page() {
  </select>
  </div>
  
- <div class="filter-group">
+ <div class="filter-group aoam-filter-actions">
  <button type="submit" class="button button-primary">Apply Filters</button>
  <a href="?page=moderator-recent-assignments" class="button button-secondary">Reset Filters</a>
  </div>
@@ -3850,6 +3881,140 @@ function moderator_recent_assignments_page() {
  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
  max-width: 100%;
  }
+ .aoam-report-panel {
+ background: #fff;
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+ margin: 20px 0;
+ padding: 22px;
+ }
+ .aoam-section-heading {
+ display: flex;
+ justify-content: space-between;
+ align-items: flex-start;
+ gap: 16px;
+ margin-bottom: 18px;
+ }
+ .aoam-section-heading h2,
+ .aoam-section-heading h3 {
+ margin: 0;
+ color: #1d2327;
+ }
+ .aoam-section-heading p {
+ margin: 5px 0 0;
+ color: #646970;
+ }
+ .aoam-section-heading-small {
+ margin-bottom: 12px;
+ }
+ .aoam-soft-button {
+ border-color: #c3d9ff !important;
+ color: #0073aa !important;
+ background: #f0f6ff !important;
+ }
+ .aoam-stats-grid {
+ display: grid;
+ grid-template-columns: repeat(5, minmax(150px, 1fr));
+ gap: 14px;
+ }
+ .aoam-stat-tile {
+ display: flex;
+ align-items: center;
+ gap: 13px;
+ min-height: 78px;
+ padding: 16px;
+ border: 1px solid #e6eaf0;
+ border-radius: 8px;
+ background: #f8fafc;
+ }
+ .aoam-stat-tile .dashicons {
+ width: 38px;
+ height: 38px;
+ border-radius: 8px;
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ font-size: 20px;
+ }
+ .aoam-stat-tile strong {
+ display: block;
+ font-size: 25px;
+ line-height: 1.1;
+ color: #1d2327;
+ }
+ .aoam-stat-tile small {
+ display: block;
+ margin-top: 3px;
+ color: #646970;
+ font-weight: 600;
+ }
+ .aoam-stat-total .dashicons { background: #e7f3ff; color: #0073aa; }
+ .aoam-stat-today .dashicons { background: #e5f7e5; color: #1f8f3a; }
+ .aoam-stat-showing .dashicons { background: #f0f6ff; color: #3858e9; }
+ .aoam-stat-pages .dashicons { background: #fff8e5; color: #996800; }
+ .aoam-stat-users .dashicons { background: #ffecec; color: #cc1818; }
+ .aoam-status-panel {
+ margin-top: 22px;
+ padding-top: 18px;
+ border-top: 1px solid #edf0f2;
+ }
+ .aoam-status-grid {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 10px;
+ }
+ .aoam-active-filter-note {
+ margin-top: 16px;
+ padding: 12px 14px;
+ border: 1px solid #c3d9ff;
+ border-left: 4px solid #2271b1;
+ background: #f0f6ff;
+ border-radius: 6px;
+ color: #1d2327;
+ }
+ .aoam-filter-panel {
+ padding-bottom: 20px;
+ }
+ .assignment-filters {
+ padding: 16px;
+ background: #f6f7f7;
+ border: 1px solid #edf0f2;
+ border-radius: 8px;
+ }
+ .aoam-filter-form {
+ display: grid;
+ grid-template-columns: repeat(4, minmax(170px, 1fr));
+ gap: 14px;
+ align-items: end;
+ }
+ .aoam-filter-form .filter-group {
+ width: auto !important;
+ display: flex;
+ flex-direction: column;
+ gap: 7px;
+ }
+ .aoam-filter-form .filter-group label {
+ color: #1d2327;
+ font-weight: 700;
+ }
+ .aoam-filter-form .filter-group select {
+ width: 100%;
+ max-width: none;
+ min-height: 36px;
+ border-color: #c3c4c7;
+ border-radius: 6px;
+ }
+ .aoam-filter-actions {
+ flex-direction: row !important;
+ gap: 8px;
+ align-items: center;
+ }
+ .aoam-filter-actions .button {
+ min-height: 36px;
+ display: inline-flex;
+ align-items: center;
+ }
  span.current-page.button {
  background-color: #ddd;
  }
@@ -3933,10 +4098,11 @@ function moderator_recent_assignments_page() {
  display: flex;
  align-items: center;
  gap: 8px;
- padding: 8px 12px;
- border-radius: 20px;
+ padding: 8px 10px 8px 12px;
+ border-radius: 999px;
  font-size: 12px;
  font-weight: bold;
+ border: 1px solid transparent;
  }
  .status-count-badge.status-pending { background: #fff8e5; color: #8a6d3b; }
  .status-count-badge.status-partial { background: #777; color: #fff; }
@@ -3952,6 +4118,30 @@ function moderator_recent_assignments_page() {
  border-radius: 10px;
  font-weight: bold;
  color: #777;
+ }
+ @media (max-width: 1200px) {
+ .aoam-stats-grid,
+ .aoam-filter-form {
+ grid-template-columns: repeat(2, minmax(180px, 1fr));
+ }
+ }
+ @media (max-width: 782px) {
+ .aoam-report-panel {
+ padding: 16px;
+ }
+ .aoam-section-heading {
+ flex-direction: column;
+ }
+ .aoam-stats-grid,
+ .aoam-filter-form {
+ grid-template-columns: 1fr;
+ }
+ .aoam-filter-actions {
+ align-items: stretch;
+ }
+ .aoam-filter-actions .button {
+ justify-content: center;
+ }
  }
  .modal-backdrop {
  position: fixed;
