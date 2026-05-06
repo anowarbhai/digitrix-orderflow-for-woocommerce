@@ -3397,17 +3397,6 @@ function moderator_recent_assignments_page() {
  });
  }
 
- window.aoamRefreshSimpleOrders = function() {
- var params = collectParamsFromUrl();
- params.set('paged', '1');
- loadSimpleOrders(params, false);
- };
-
- window.aoamRefreshSimpleOrdersAfterUpdate = function() {
- window.aoamRefreshSimpleOrders();
- setTimeout(window.aoamRefreshSimpleOrders, 350);
- };
-
  $app.on('submit', '.aoam-filter-form', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
@@ -4738,6 +4727,27 @@ function simple_moderator_orders_page() {
  request = null;
  });
  }
+
+ window.aoamRefreshSimpleOrders = function() {
+ var params = collectParamsFromUrl();
+ if ($('#status_filter_select').length) {
+ params.set('status', $('#status_filter_select').val() || 'all');
+ }
+ if ($('#date_filter_select').length) {
+ params.set('date_filter', $('#date_filter_select').val() || 'all');
+ }
+ if ($('#phone_search_main').length) {
+ params.set('phone_search', $('#phone_search_main').val() || '');
+ }
+ params.set('page', 'moderator-simple-orders');
+ params.set('paged', '1');
+ loadSimpleOrders(params, false);
+ };
+
+ window.aoamRefreshSimpleOrdersAfterUpdate = function() {
+ window.aoamRefreshSimpleOrders();
+ setTimeout(window.aoamRefreshSimpleOrders, 350);
+ };
 
  $app.on('submit', '.orders-filter-toolbar, .phone-search-form', function(e) {
  e.preventDefault();
