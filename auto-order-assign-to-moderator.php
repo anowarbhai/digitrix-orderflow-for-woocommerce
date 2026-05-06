@@ -4752,9 +4752,7 @@ function simple_moderator_orders_page() {
  window.aoamHideSimpleOrderIfFiltered = function(orderId, newStatus) {
  var currentStatus = $('#status_filter_select').val() || 'all';
  if (currentStatus !== 'all' && currentStatus !== newStatus) {
- $('[data-order-id="' + orderId + '"]').fadeOut(160, function() {
- $(this).remove();
- });
+ $('[data-order-id="' + orderId + '"]').remove();
  }
  };
 
@@ -4780,7 +4778,9 @@ function simple_moderator_orders_page() {
  if (!orderId || !newStatus) {
  return;
  }
- $select.prop('disabled', true);
+ var $card = $select.closest('.mobile-order-card');
+ $card.addClass('is-updating-status');
+ $select.css('visibility', 'hidden');
  $.ajax({
  url: ajaxurl,
  type: 'POST',
@@ -4801,11 +4801,13 @@ function simple_moderator_orders_page() {
  }
  } else {
  alert(response && response.data ? response.data : 'Status update failed');
- $select.prop('disabled', false);
+ $card.removeClass('is-updating-status');
+ $select.css('visibility', '');
  }
  }).fail(function() {
  alert('Network error. Please try again.');
- $select.prop('disabled', false);
+ $card.removeClass('is-updating-status');
+ $select.css('visibility', '');
  });
  });
 
@@ -4836,7 +4838,6 @@ function simple_moderator_orders_page() {
  min-height: 240px;
  }
  .aoam-simple-ajax-shell.is-loading {
- opacity: .68;
  pointer-events: none;
  }
  .aoam-simple-loading {
@@ -5736,6 +5737,23 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  flex: 0 0 auto;
  margin: 0;
  text-align: right;
+ }
+ .mobile-order-card.is-updating-status .mobile-status-form {
+ min-height: 40px;
+ position: relative;
+ }
+ .mobile-order-card.is-updating-status .mobile-status-form:after {
+ align-items: center;
+ background: #f8fafc;
+ border: 1px solid #dce2e8;
+ border-radius: 10px;
+ color: #64748b;
+ content: "Updating...";
+ display: flex;
+ font-size: 14px;
+ inset: 0;
+ justify-content: center;
+ position: absolute;
  }
  @media (max-width: 782px) {
  body.wp-admin {
