@@ -3274,6 +3274,146 @@ function enqueue_select2_assets($hook) {
 }
 
 function moderator_recent_assignments_page() {
+ ?>
+ <div class="wrap">
+ <h1>Recent Assignments</h1>
+ <div class="nav-tab-wrapper">
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-settings')); ?>" class="nav-tab">Dashboard</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-recent-assignments')); ?>" class="nav-tab nav-tab-active">Recent Assignments</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-sequence-status')); ?>" class="nav-tab">Sequence & Status</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-product-assignments')); ?>" class="nav-tab">Product Assignments</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-reassign-orders')); ?>" class="nav-tab">Reassign</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-plugin-settings')); ?>" class="nav-tab">Plugin Settings</a>
+ </div>
+ <div id="aoam-recent-assignments-app" class="aoam-ajax-shell">
+ <div class="aoam-ajax-loading"><span class="spinner is-active"></span><p>Loading assignments...</p></div>
+ </div>
+ </div>
+ <script>
+ jQuery(function($) {
+ var $app = $('#aoam-recent-assignments-app');
+ var request = null;
+
+ function collectParamsFromUrl(url) {
+ var target = new URL(url || window.location.href, window.location.href);
+ return target.searchParams;
+ }
+
+ function loadRecentAssignments(params, pushUrl) {
+ if (request) {
+ request.abort();
+ }
+
+ var searchParams = params || collectParamsFromUrl();
+ searchParams.set('page', 'moderator-recent-assignments');
+ $app.addClass('is-loading');
+ if (!$app.children().length || $app.find('.aoam-ajax-loading').length) {
+ $app.html('<div class="aoam-ajax-loading"><span class="spinner is-active"></span><p>Loading assignments...</p></div>');
+ }
+
+ request = $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: {
+ action: 'aoam_recent_assignments_ajax',
+ nonce: '<?php echo esc_js(wp_create_nonce('aoam_recent_assignments_ajax')); ?>',
+ moderator_filter: searchParams.get('moderator_filter') || '0',
+ source_filter: searchParams.get('source_filter') || 'all',
+ status_filter: searchParams.get('status_filter') || 'all',
+ per_page: searchParams.get('per_page') || '20',
+ paged: searchParams.get('paged') || '1'
+ }
+ }).done(function(response) {
+ if (response && response.success && response.data && response.data.html) {
+ $app.html(response.data.html);
+ if (pushUrl) {
+ window.history.pushState({}, '', '?' + searchParams.toString());
+ }
+ } else {
+ $app.html('<div class="notice notice-error"><p>Could not load assignments.</p></div>');
+ }
+ }).fail(function(xhr, status) {
+ if (status !== 'abort') {
+ $app.html('<div class="notice notice-error"><p>Server took too long to load assignments. Please try again.</p></div>');
+ }
+ }).always(function() {
+ $app.removeClass('is-loading');
+ request = null;
+ });
+ }
+
+ $app.on('submit', '.aoam-filter-form', function(e) {
+ e.preventDefault();
+ var params = new URLSearchParams($(this).serialize());
+ params.set('paged', '1');
+ loadRecentAssignments(params, true);
+ });
+
+ $app.on('change', '.aoam-filter-form select', function() {
+ $(this).closest('form').trigger('submit');
+ });
+
+ $app.on('click', '.tablenav-pages a, .aoam-soft-button, .aoam-reset-filters', function(e) {
+ var href = $(this).attr('href');
+ if (!href) {
+ return;
+ }
+ e.preventDefault();
+ loadRecentAssignments(collectParamsFromUrl(href), true);
+ });
+
+ window.addEventListener('popstate', function() {
+ loadRecentAssignments(collectParamsFromUrl(), false);
+ });
+
+ loadRecentAssignments(collectParamsFromUrl(), false);
+ });
+ </script>
+ <style>
+ .aoam-ajax-shell {
+ min-height: 240px;
+ position: relative;
+ }
+ .aoam-ajax-shell.is-loading {
+ opacity: .68;
+ pointer-events: none;
+ }
+ .aoam-ajax-loading {
+ background: #fff;
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ margin: 20px 0;
+ padding: 48px;
+ text-align: center;
+ }
+ .aoam-ajax-loading .spinner {
+ float: none;
+ margin: 0 0 10px;
+ }
+ </style>
+ <?php
+}
+
+add_action('wp_ajax_aoam_recent_assignments_ajax', 'aoam_recent_assignments_ajax');
+function aoam_recent_assignments_ajax() {
+ check_ajax_referer('aoam_recent_assignments_ajax', 'nonce');
+ if (!current_user_can('manage_woocommerce') && !current_user_can('manage_options')) {
+ wp_send_json_error(array('message' => 'Permission denied'), 403);
+ }
+
+ $_GET['moderator_filter'] = isset($_POST['moderator_filter']) ? absint($_POST['moderator_filter']) : 0;
+ $_GET['source_filter'] = isset($_POST['source_filter']) ? sanitize_key($_POST['source_filter']) : 'all';
+ $_GET['status_filter'] = isset($_POST['status_filter']) ? sanitize_key($_POST['status_filter']) : 'all';
+ $_GET['per_page'] = isset($_POST['per_page']) ? absint($_POST['per_page']) : 20;
+ $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
+
+ ob_start();
+ aoam_render_recent_assignments_page_content(true);
+ wp_send_json_success(array('html' => ob_get_clean()));
+}
+
+function aoam_render_recent_assignments_page_content($ajax_request = false) {
  // ADD: Get assigned roles dynamically
  $assigned_roles = aoam_get_assigned_roles();
  
@@ -3316,6 +3456,7 @@ function moderator_recent_assignments_page() {
  $today_end = $today_date . ' 23:59:59';
 
  ?>
+ <?php if (!$ajax_request): ?>
  <div class="wrap">
         <h1>Recent Assignments</h1>
  
@@ -3329,6 +3470,7 @@ function moderator_recent_assignments_page() {
  <!-- ADD: Plugin Settings tab -->
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
  </div>
+ <?php endif; ?>
 
  
 
@@ -3619,7 +3761,7 @@ function moderator_recent_assignments_page() {
  
  <div class="filter-group aoam-filter-actions">
  <button type="submit" class="button button-primary">Apply Filters</button>
- <a href="?page=moderator-recent-assignments" class="button button-secondary">Reset Filters</a>
+ <a href="?page=moderator-recent-assignments" class="button button-secondary aoam-reset-filters">Reset Filters</a>
  </div>
  </form>
  </div>
@@ -3791,7 +3933,7 @@ function moderator_recent_assignments_page() {
  There are <?php echo esc_html($status_counts['all']); ?> assigned orders, but none with status "<?php echo esc_html($status_filter); ?>".
  </p>
  <?php endif; ?>
- <a href="?page=moderator-recent-assignments" class="button button-primary">Reset Filters</a>
+ <a href="?page=moderator-recent-assignments" class="button button-primary aoam-reset-filters">Reset Filters</a>
  </div>
  <?php endif; ?>
  </div>
@@ -3814,7 +3956,9 @@ function moderator_recent_assignments_page() {
  </button>
  </div>
  </div>
+ <?php if (!$ajax_request): ?>
  </div>
+ <?php endif; ?>
  
  <!-- Order Details Modal -->
  <div id="order-details-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 2px solid #0073aa; z-index: 10000; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
