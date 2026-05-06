@@ -3345,11 +3345,17 @@ function moderator_recent_assignments_page() {
  });
  };
 
- window.closeOrderModal = function() {
+ function aoamForceCloseModal() {
  modalOrderId = null;
  $('#order-details-modal, .aoam-order-modal').hide();
  $('.modal-backdrop').remove();
  $('body').removeClass('aoam-modal-open');
+ }
+
+ window.closeOrderModal = function() {
+ aoamForceCloseModal();
+ setTimeout(aoamForceCloseModal, 50);
+ setTimeout(aoamForceCloseModal, 250);
  };
 
  var searchParams = params || collectParamsFromUrl();
@@ -3425,6 +3431,11 @@ function moderator_recent_assignments_page() {
 
  $(document).on('click', '.modal-backdrop', function() {
  closeOrderModal();
+ });
+
+ $(document).on('click', '[onclick*="closeOrderModal"], .aoam-modal-close', function() {
+ setTimeout(aoamForceCloseModal, 0);
+ setTimeout(aoamForceCloseModal, 100);
  });
 
  $(document).on('keyup', function(e) {
@@ -4450,6 +4461,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  background: rgba(0,0,0,0.5);
  z-index: 9999;
  }
+ #order-details-modal[style*="display: none"] ~ .modal-backdrop,
  body:not(.aoam-modal-open) .modal-backdrop {
  display: none !important;
  }
