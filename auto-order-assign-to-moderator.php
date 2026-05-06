@@ -4473,12 +4473,14 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  
  function viewOrderDetails(orderId) {
  // Simple loading message
+ jQuery('.modal-backdrop').remove();
  document.getElementById("modal-order-id").textContent = orderId;
  document.getElementById("order-details-content").innerHTML = "<div style='text-align: center; padding: 40px;'><div class='spinner is-active' style='float: none;'></div><p>Loading order details...</p></div>";
  
  // Show modal and backdrop
  document.body.appendChild(document.createElement("div")).className = "modal-backdrop";
  document.getElementById("order-details-modal").style.display = "block";
+ document.body.classList.add("aoam-modal-open");
  
  // Load details via AJAX
  jQuery.ajax({
@@ -4503,11 +4505,15 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  
  function closeOrderModal() {
- document.getElementById("order-details-modal").style.display = "none";
+ var modal = document.getElementById("order-details-modal");
+ if (modal) {
+ modal.style.display = "none";
+ }
  var backdrops = document.getElementsByClassName("modal-backdrop");
  while (backdrops.length > 0) {
  backdrops[0].remove();
  }
+ document.body.classList.remove("aoam-modal-open");
  }
  
  // Close modal when clicking backdrop
@@ -5994,11 +6000,13 @@ function simple_moderator_orders_page() {
  
  <script>
  function viewOrderDetails(orderId) {
+ jQuery('.modal-backdrop').remove();
  document.getElementById("modal-order-id").textContent = orderId;
  document.getElementById("order-details-content").innerHTML = "<p>Loading order details...</p>";
  
  document.body.appendChild(document.createElement("div")).className = "modal-backdrop";
  document.getElementById("order-details-modal").style.display = "block";
+ document.body.classList.add("aoam-modal-open");
  
  jQuery.ajax({
  url: "<?php echo admin_url('admin-ajax.php'); ?>",
@@ -6022,11 +6030,15 @@ function simple_moderator_orders_page() {
  }
  
  function closeOrderModal() {
- document.getElementById("order-details-modal").style.display = "none";
+ var modal = document.getElementById("order-details-modal");
+ if (modal) {
+ modal.style.display = "none";
+ }
  var backdrops = document.getElementsByClassName("modal-backdrop");
  while (backdrops.length > 0) {
  backdrops[0].remove();
  }
+ document.body.classList.remove("aoam-modal-open");
  }
  
  document.addEventListener("click", function(e) {
