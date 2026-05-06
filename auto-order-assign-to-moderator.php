@@ -4749,6 +4749,15 @@ function simple_moderator_orders_page() {
  setTimeout(window.aoamRefreshSimpleOrders, 350);
  };
 
+ window.aoamHideSimpleOrderIfFiltered = function(orderId, newStatus) {
+ var currentStatus = $('#status_filter_select').val() || 'all';
+ if (currentStatus !== 'all' && currentStatus !== newStatus) {
+ $('[data-order-id="' + orderId + '"]').fadeOut(160, function() {
+ $(this).remove();
+ });
+ }
+ };
+
  $app.on('submit', '.orders-filter-toolbar, .phone-search-form', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
@@ -5267,7 +5276,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  $item_count += $item->get_quantity();
  }
  ?>
- <tr>
+ <tr data-order-id="<?php echo esc_attr($order->get_id()); ?>">
  <td>
  <strong>#<?php echo $order->get_id(); ?></strong>
  <?php if ($is_today): ?>
@@ -5360,7 +5369,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  $order_date_timestamp = aoam_get_order_local_timestamp($order);
  $time_ago = $order_date_timestamp ? human_time_diff($order_date_timestamp, current_time('timestamp')) . ' ago' : '';
  ?>
- <article class="mobile-order-card">
+ <article class="mobile-order-card" data-order-id="<?php echo esc_attr($order->get_id()); ?>">
  <div class="mobile-card-top">
  <div class="mobile-card-badges">
  <span class="mobile-status-pill <?php echo esc_attr($status_class); ?>"><?php echo esc_html($status_label); ?></span>
@@ -6615,12 +6624,18 @@ function get_moderator_order_details_simple_fixed() {
  data: formData + '&action=update_order_status_ajax',
  success: function(response) {
  if (response.success) {
+ var updatedOrderId = $('#update_status_form input[name="order_id"]').val();
+ var updatedStatus = $('#order_status_select').val();
  // Show success message
  $message.html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;"> ' + response.data.message + '</div>').show();
  
  // Update status display in MODAL ONLY
  $('#current_status_display').text(response.data.new_status_label);
  
+ closeOrderModal();
+ if (window.aoamHideSimpleOrderIfFiltered) {
+ window.aoamHideSimpleOrderIfFiltered(updatedOrderId, updatedStatus);
+ }
  if (window.aoamRefreshSimpleOrdersAfterUpdate) {
  window.aoamRefreshSimpleOrdersAfterUpdate();
  } else if (window.aoamRefreshSimpleOrders) {
@@ -6628,7 +6643,6 @@ function get_moderator_order_details_simple_fixed() {
  } else if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
- closeOrderModal();
  
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;"> ' + response.data + '</div>').show();
