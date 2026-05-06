@@ -4664,6 +4664,143 @@ function aoam_hide_admin_bar_for_assigned_roles($show) {
 }
 
 function simple_moderator_orders_page() {
+ ?>
+ <div class="wrap">
+ <div id="aoam-simple-orders-app" class="aoam-simple-ajax-shell">
+ <div class="aoam-simple-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>
+ </div>
+ </div>
+ <script>
+ jQuery(function($) {
+ var $app = $('#aoam-simple-orders-app');
+ var request = null;
+
+ function collectParamsFromUrl(url) {
+ var target = new URL(url || window.location.href, window.location.href);
+ return target.searchParams;
+ }
+
+ function collectParamsFromForm($form) {
+ var params = new URLSearchParams($form.serialize());
+ params.set('page', 'moderator-simple-orders');
+ params.set('paged', '1');
+ return params;
+ }
+
+ function loadSimpleOrders(params, pushUrl) {
+ if (request) {
+ request.abort();
+ }
+ var searchParams = params || collectParamsFromUrl();
+ searchParams.set('page', 'moderator-simple-orders');
+ $app.addClass('is-loading');
+ if (!$app.children().length || $app.find('.aoam-simple-loading').length) {
+ $app.html('<div class="aoam-simple-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>');
+ }
+ request = $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: {
+ action: 'aoam_simple_orders_ajax',
+ nonce: '<?php echo esc_js(wp_create_nonce('aoam_simple_orders_ajax')); ?>',
+ status: searchParams.get('status') || 'all',
+ date_filter: searchParams.get('date_filter') || 'all',
+ phone_search: searchParams.get('phone_search') || '',
+ paged: searchParams.get('paged') || '1'
+ }
+ }).done(function(response) {
+ if (response && response.success && response.data && response.data.html) {
+ $app.html(response.data.html);
+ if (pushUrl) {
+ window.history.pushState({}, '', '?' + searchParams.toString());
+ }
+ } else {
+ $app.html('<div class="notice notice-error"><p>Could not load orders.</p></div>');
+ }
+ }).fail(function(xhr, status) {
+ if (status !== 'abort') {
+ $app.html('<div class="notice notice-error"><p>Server took too long to load orders. Please try again.</p></div>');
+ }
+ }).always(function() {
+ $app.removeClass('is-loading');
+ request = null;
+ });
+ }
+
+ $app.on('submit', '.orders-filter-toolbar, .phone-search-form', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ loadSimpleOrders(collectParamsFromForm($(this)), true);
+ });
+
+ $app.on('change', '.orders-filter-toolbar select', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ loadSimpleOrders(collectParamsFromForm($(this).closest('form')), true);
+ });
+
+ $app.on('click', '.tablenav-pages a, .phone-search-form a, .search-stats a, .notice a[href*="moderator-simple-orders"]', function(e) {
+ var href = $(this).attr('href');
+ if (!href) {
+ return;
+ }
+ e.preventDefault();
+ loadSimpleOrders(collectParamsFromUrl(href), true);
+ });
+
+ window.addEventListener('popstate', function() {
+ loadSimpleOrders(collectParamsFromUrl(), false);
+ });
+
+ document.addEventListener('submit', function(event) {
+ if (event.target && event.target.classList && (event.target.classList.contains('orders-filter-toolbar') || event.target.classList.contains('phone-search-form'))) {
+ event.preventDefault();
+ }
+ }, true);
+
+ loadSimpleOrders(collectParamsFromUrl(), false);
+ });
+ </script>
+ <style>
+ .aoam-simple-ajax-shell {
+ min-height: 240px;
+ }
+ .aoam-simple-ajax-shell.is-loading {
+ opacity: .68;
+ pointer-events: none;
+ }
+ .aoam-simple-loading {
+ background: #fff;
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ margin: 20px 0;
+ padding: 48px;
+ text-align: center;
+ }
+ .aoam-simple-loading .spinner {
+ float: none;
+ margin: 0 0 10px;
+ }
+ </style>
+ <?php
+}
+
+add_action('wp_ajax_aoam_simple_orders_ajax', 'aoam_simple_orders_ajax');
+function aoam_simple_orders_ajax() {
+ check_ajax_referer('aoam_simple_orders_ajax', 'nonce');
+ $_GET['page'] = 'moderator-simple-orders';
+ $_GET['status'] = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : 'all';
+ $_GET['date_filter'] = isset($_POST['date_filter']) ? sanitize_text_field($_POST['date_filter']) : 'all';
+ $_GET['phone_search'] = isset($_POST['phone_search']) ? sanitize_text_field($_POST['phone_search']) : '';
+ $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
+
+ ob_start();
+ aoam_render_simple_moderator_orders_page_content(true);
+ wp_send_json_success(array('html' => ob_get_clean()));
+}
+
+function aoam_render_simple_moderator_orders_page_content($ajax_request = false) {
  $current_user = wp_get_current_user();
  $user_id = $current_user->ID;
  
@@ -4859,6 +4996,15 @@ function simple_moderator_orders_page() {
  $total_pages = ceil($total_orders / $per_page);
  $offset = ($paged - 1) * $per_page;
  $orders = array_slice($all_filtered_orders, $offset, $per_page);
+ $simple_orders_base_url = admin_url('admin.php');
+ $clear_phone_url = add_query_arg(array(
+ 'page' => 'moderator-simple-orders',
+ 'status' => $status_filter,
+ 'date_filter' => $date_filter,
+ ), $simple_orders_base_url);
+ $show_all_url = add_query_arg(array(
+ 'page' => 'moderator-simple-orders',
+ ), $simple_orders_base_url);
  ?>
  
  <!-- Date and Status filters -->
@@ -4869,14 +5015,14 @@ function simple_moderator_orders_page() {
  <input type="hidden" name="paged" value="1">
  <div class="orders-filter-field">
  <label for="date_filter_select">Date</label>
- <select id="date_filter_select" name="date_filter" onchange="this.form.submit()">
+ <select id="date_filter_select" name="date_filter">
  <option value="all" <?php selected($date_filter, 'all'); ?>>All Orders (<?php echo esc_html($status_counts['all']); ?>)</option>
  <option value="today" <?php selected($date_filter, 'today'); ?>>Today's Orders (<?php echo esc_html($today_orders_count); ?>)</option>
  </select>
  </div>
  <div class="orders-filter-field orders-filter-field-right">
  <label for="status_filter_select">Status</label>
- <select id="status_filter_select" name="status" onchange="this.form.submit()">
+ <select id="status_filter_select" name="status">
  <option value="all" <?php selected($status_filter, 'all'); ?>>All (<?php echo esc_html($date_filter === 'today' ? $total_orders : $status_counts['all']); ?>)</option>
  <option value="pending" <?php selected($status_filter, 'pending'); ?>>Pending (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['pending'] : $status_counts['pending']); ?>)</option>
  <option value="partial" <?php selected($status_filter, 'partial'); ?>>Partial (<?php echo esc_html($date_filter === 'today' ? $today_orders_by_status['partial'] : $status_counts['partial']); ?>)</option>
@@ -4898,9 +5044,9 @@ function simple_moderator_orders_page() {
  <div class="phone-search-section" style="margin-bottom: 30px; background: #fff; padding: 20px; border: 1px solid #ccd0d4; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
  <h3 style="margin-top: 0; margin-bottom: 15px;"> Search Orders by Phone Number</h3>
  
- <form method="get" action="" class="phone-search-form">
+ <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" class="phone-search-form">
  <!-- Keep existing filters in URL -->
- <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? ''); ?>">
+ <input type="hidden" name="page" value="moderator-simple-orders">
  <input type="hidden" name="status" value="<?php echo esc_attr($status_filter); ?>">
  <input type="hidden" name="date_filter" value="<?php echo esc_attr($date_filter); ?>">
  
@@ -4916,7 +5062,7 @@ function simple_moderator_orders_page() {
  </button>
  
  <?php if (!empty($phone_search)): ?>
- <a href="<?php echo remove_query_arg('phone_search'); ?>" 
+ <a href="<?php echo esc_url($clear_phone_url); ?>" 
  class="button" 
  style="white-space: nowrap; padding: 10px 20px; background: #f0f0f0; border-color: #ccc;">
  Clear Search
@@ -4928,7 +5074,7 @@ function simple_moderator_orders_page() {
  <div style="margin-top: 10px; padding: 12px; background: #e5f7e5; border-radius: 4px; color: #46b450; border-left: 4px solid #46b450;">
  <strong> Showing orders for phone number:</strong> <?php echo esc_html($phone_search); ?>
  <span style="float: right;">
- <a href="<?php echo remove_query_arg('phone_search'); ?>" style="color: #0073aa; text-decoration: none; font-weight: bold;">
+ <a href="<?php echo esc_url($clear_phone_url); ?>" style="color: #0073aa; text-decoration: none; font-weight: bold;">
  Clear filter
  </a>
  </span>
@@ -4985,9 +5131,9 @@ function simple_moderator_orders_page() {
  <?php endif; ?>
  </p>
  <p>
- <a href="<?php echo remove_query_arg(array('status', 'date_filter', 'paged', 'phone_search')); ?>" class="button button-primary">Show All Orders</a>
+ <a href="<?php echo esc_url($show_all_url); ?>" class="button button-primary">Show All Orders</a>
  <?php if (!empty($phone_search)): ?>
- <a href="<?php echo remove_query_arg('phone_search'); ?>" class="button" style="margin-left: 10px;">Clear Phone Search</a>
+ <a href="<?php echo esc_url($clear_phone_url); ?>" class="button" style="margin-left: 10px;">Clear Phone Search</a>
  <?php endif; ?>
  </p>
  </div>
@@ -5036,7 +5182,7 @@ function simple_moderator_orders_page() {
  <h4 style="margin-top: 0;"> Phone Search Active</h4>
  <p style="margin: 5px 0;">
  <strong>Searching for:</strong> <code style="background: white; padding: 2px 8px; border-radius: 3px; font-size: 14px;"><?php echo esc_html($phone_search); ?></code>
- <a href="<?php echo remove_query_arg('phone_search'); ?>" style="margin-left: 10px; color: #0073aa; text-decoration: none;">
+ <a href="<?php echo esc_url($clear_phone_url); ?>" style="margin-left: 10px; color: #0073aa; text-decoration: none;">
  (Clear search)
  </a>
  </p>
@@ -5264,7 +5410,7 @@ function simple_moderator_orders_page() {
  'status' => $status_filter,
  'date_filter' => $date_filter,
  'phone_search' => $phone_search
- ), remove_query_arg('paged'));
+ ), $simple_orders_base_url);
  
  // Previous page
  if ($paged > 1) {
