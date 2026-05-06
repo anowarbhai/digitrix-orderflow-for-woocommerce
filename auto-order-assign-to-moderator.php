@@ -4819,6 +4819,9 @@ function simple_moderator_orders_page() {
  var currentStatus = $('#status_filter_select').val() || 'all';
  if (currentStatus !== 'all' && currentStatus !== newStatus) {
  $('[data-order-id="' + orderId + '"]').remove();
+ if (!$('.mobile-order-card').length && !$('.fixed-table tbody tr').length && !$('.aoam-simple-empty-state').length) {
+ $('#orders-table-container').append('<div class="aoam-simple-empty-state"><h3>No orders found</h3><p>No orders match the current filters.</p></div>');
+ }
  }
  };
 
@@ -4980,7 +4983,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <?php
  } else {
  ?>
- <div class="notice notice-error">
+ <div class="notice notice-error aoam-simple-empty-state">
  <p> You are not authorized to update this order or order not found.</p>
  </div>
  <?php
@@ -5243,7 +5246,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <p>You don't have any orders assigned to you yet.</p>
  </div>
  <?php elseif (empty($all_filtered_orders)) : ?>
- <div class="notice notice-info">
+ <div class="notice notice-info aoam-simple-empty-state">
  <p>
  <?php if (!empty($phone_search)): ?>
  <strong> No orders found for phone number:</strong> <?php echo esc_html($phone_search); ?>
@@ -5803,6 +5806,22 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  flex: 0 0 auto;
  margin: 0;
  text-align: right;
+ }
+ .aoam-simple-empty-state {
+ background: #fff;
+ border: 1px solid #dce2e8;
+ border-radius: 10px;
+ box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+ margin: 16px 0;
+ padding: 30px 18px;
+ text-align: center;
+ }
+ .aoam-simple-empty-state h3 {
+ margin: 0 0 8px;
+ }
+ .aoam-simple-empty-state p {
+ color: #64748b;
+ margin: 0 0 14px;
  }
  .mobile-order-card.is-updating-status .mobile-status-form {
  min-height: 40px;
