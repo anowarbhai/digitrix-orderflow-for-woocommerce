@@ -3293,6 +3293,7 @@ function moderator_recent_assignments_page() {
  jQuery(function($) {
  var $app = $('#aoam-recent-assignments-app');
  var request = null;
+ var modalOrderId = null;
 
  function collectParamsFromUrl(url) {
  var target = new URL(url || window.location.href, window.location.href);
@@ -3303,6 +3304,44 @@ function moderator_recent_assignments_page() {
  if (request) {
  request.abort();
  }
+
+ window.aoamRefreshRecentAssignments = function() {
+ loadRecentAssignments(collectParamsFromUrl(), false);
+ };
+
+ window.viewOrderDetails = function(orderId) {
+ modalOrderId = orderId;
+ $('#modal-order-id').text(orderId);
+ $('#order-details-content').html("<div style='text-align: center; padding: 40px;'><div class='spinner is-active' style='float: none;'></div><p>Loading order details...</p></div>");
+ if (!$('.modal-backdrop').length) {
+ $('body').append('<div class="modal-backdrop"></div>');
+ }
+ $('#order-details-modal').show();
+
+ $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: {
+ action: 'get_moderator_order_details_simple',
+ order_id: orderId,
+ nonce: '<?php echo esc_js(wp_create_nonce('moderator_order_details')); ?>'
+ }
+ }).done(function(response) {
+ if (response && response.success) {
+ $('#order-details-content').html(response.data);
+ } else {
+ $('#order-details-content').html("<div style='text-align: center; padding: 40px; color: #cc1818;'><p>Error loading order details.</p></div>");
+ }
+ }).fail(function() {
+ $('#order-details-content').html("<div style='text-align: center; padding: 40px; color: #cc1818;'><p>Error loading order details.</p></div>");
+ });
+ };
+
+ window.closeOrderModal = function() {
+ $('#order-details-modal').hide();
+ $('.modal-backdrop').remove();
+ };
 
  var searchParams = params || collectParamsFromUrl();
  searchParams.set('page', 'moderator-recent-assignments');
@@ -3361,6 +3400,91 @@ function moderator_recent_assignments_page() {
  }
  e.preventDefault();
  loadRecentAssignments(collectParamsFromUrl(href), true);
+ });
+
+ $app.on('click', '.view-order-details', function(e) {
+ e.preventDefault();
+ viewOrderDetails($(this).data('order-id'));
+ });
+
+ $(document).on('click', '.modal-backdrop', function() {
+ closeOrderModal();
+ });
+
+ $(document).on('keyup', function(e) {
+ if (e.keyCode === 27) {
+ closeOrderModal();
+ }
+ });
+
+ $(document).on('submit', '#update_status_form', function(e) {
+ e.preventDefault();
+ var $form = $(this);
+ var $button = $('#update_status_btn');
+ var $message = $('#status_update_message');
+ if (!$('#order_status_select').val()) {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">Please select a status</div>').show();
+ return;
+ }
+ $button.text('Updating...').prop('disabled', true);
+ $message.hide();
+
+ $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: $form.serialize() + '&action=update_order_status_ajax'
+ }).done(function(response) {
+ if (response && response.success) {
+ $message.html('<div style="color: #1f8f3a; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + response.data.message + '</div>').show();
+ $('#current_status_display').text(response.data.new_status_label);
+ aoamRefreshRecentAssignments();
+ if (modalOrderId) {
+ setTimeout(function() { viewOrderDetails(modalOrderId); }, 500);
+ }
+ } else {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'Update failed') + '</div>').show();
+ }
+ }).fail(function() {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">Network error. Please try again.</div>').show();
+ }).always(function() {
+ $button.text('Update Status').prop('disabled', false);
+ });
+ });
+
+ $(document).on('submit', '#change_moderator_form', function(e) {
+ e.preventDefault();
+ var $form = $(this);
+ var $button = $form.find('button[type="submit"]');
+ var $message = $('#moderator_change_message');
+ if (!$form.find('select[name="new_moderator_id"]').val()) {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">Please select a user</div>').show();
+ return;
+ }
+ $button.text('Changing...').prop('disabled', true);
+ $message.hide();
+
+ $.ajax({
+ url: ajaxurl,
+ type: 'POST',
+ dataType: 'json',
+ data: $form.serialize() + '&action=change_order_moderator_ajax'
+ }).done(function(response) {
+ if (response && response.success) {
+ var message = response.data && response.data.message ? response.data.message : 'User changed successfully.';
+ $message.html('<div style="color: #1f8f3a; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
+ aoamRefreshRecentAssignments();
+ if (modalOrderId) {
+ setTimeout(function() { viewOrderDetails(modalOrderId); }, 500);
+ }
+ } else {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'User change failed') + '</div>').show();
+ }
+ }).fail(function() {
+ $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">Network error. Please try again.</div>').show();
+ }).always(function() {
+ $button.text('Change User').prop('disabled', false);
+ });
  });
 
  window.addEventListener('popstate', function() {
@@ -3708,7 +3832,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  
  <div class="filter-group">
  <label for="moderator_filter">Filter by User</label> 
- <select name="moderator_filter" id="moderator_filter" onchange="this.form.submit()">
+ <select name="moderator_filter" id="moderator_filter">
  <option value="0">All Users</option> <!-- CHANGED: Moderators -> Users -->
  <?php foreach ($moderators as $mod): 
  $mod_sequence = get_user_meta($mod->ID, 'moderator_sequence', true);
@@ -3723,7 +3847,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
 
  <div class="filter-group">
  <label for="source_filter">Order Source</label>
- <select name="source_filter" id="source_filter" onchange="this.form.submit()">
+ <select name="source_filter" id="source_filter">
  <option value="all" <?php selected($source_filter, 'all'); ?>>All Sources</option>
  <option value="current" <?php selected($source_filter, 'current'); ?>>Current Site</option>
  <?php foreach ($remote_source_options as $source_key => $source_url): ?>
@@ -3736,7 +3860,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
   
  <div class="filter-group">
  <label for="status_filter">Order Status</label>
- <select name="status_filter" id="status_filter" onchange="this.form.submit()">
+ <select name="status_filter" id="status_filter">
  <option value="all" <?php selected($status_filter, 'all'); ?>>All Statuses</option>
  <option value="pending" <?php selected($status_filter, 'pending'); ?>>Pending</option>
  <option value="partial" <?php selected($status_filter, 'partial'); ?>>Partial</option>
@@ -3751,7 +3875,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  
  <div class="filter-group">
  <label for="per_page">Orders per page</label>
- <select name="per_page" id="per_page" onchange="this.form.submit()">
+ <select name="per_page" id="per_page">
  <option value="10" <?php selected($per_page, 10); ?>>10</option>
  <option value="20" <?php selected($per_page, 20); ?>>20</option>
  <option value="50" <?php selected($per_page, 50); ?>>50</option>
@@ -6138,6 +6262,7 @@ function get_moderator_order_details_simple_fixed() {
  Change User
  </button>
  </form>
+ <div id="moderator_change_message" style="margin-top: 10px; display: none;"></div>
  </div>
  <?php } ?>
  </div>
@@ -6282,6 +6407,7 @@ function get_moderator_order_details_simple_fixed() {
  // Handle status update form submission
  $('#update_status_form').on('submit', function(e) {
  e.preventDefault();
+ e.stopImmediatePropagation();
  
  var formData = $(this).serialize();
  var $button = $('#update_status_btn');
@@ -6305,15 +6431,14 @@ function get_moderator_order_details_simple_fixed() {
  success: function(response) {
  if (response.success) {
  // Show success message
- $message.html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;"> ' + response.data.message + ' Reloading page...</div>').show();
+ $message.html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;"> ' + response.data.message + '</div>').show();
  
  // Update status display in MODAL ONLY
  $('#current_status_display').text(response.data.new_status_label);
  
- // RELOAD THE PAGE AFTER 1 SECOND
- setTimeout(function() {
- location.reload();
- }, 1000);
+ if (window.aoamRefreshRecentAssignments) {
+ window.aoamRefreshRecentAssignments();
+ }
  
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;"> ' + response.data + '</div>').show();
@@ -6331,6 +6456,7 @@ function get_moderator_order_details_simple_fixed() {
  // Handle moderator change form submission
  $('#change_moderator_form').on('submit', function(e) {
  e.preventDefault();
+ e.stopImmediatePropagation();
  
  var formData = $(this).serialize();
  var $button = $(this).find('button[type="submit"]');
@@ -6351,8 +6477,11 @@ function get_moderator_order_details_simple_fixed() {
  data: formData + '&action=change_order_moderator_ajax',
  success: function(response) {
  if (response.success) {
- alert(' User changed successfully!');
- location.reload(); // Reload to show updated moderator
+ var message = response.data && response.data.message ? response.data.message : 'User changed successfully!';
+ $('#moderator_change_message').html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
+ if (window.aoamRefreshRecentAssignments) {
+ window.aoamRefreshRecentAssignments();
+ }
  } else {
  alert('Error: ' + response.data);
  $button.text('Change User').prop('disabled', false);
@@ -6511,7 +6640,7 @@ function handle_change_order_moderator_ajax() {
  
  // Update moderator information
  update_post_meta($order_id, '_assigned_moderator_id', $new_moderator_id);
- update_post_meta($order_id, '_assigned_moderator_name', $new_moderator->display_name);
+ update_post_meta($order_id, '_assigned_moderator_name', $moderator->display_name);
  
  // Get sequence info
  $new_moderator_sequence = get_user_meta($new_moderator_id, 'moderator_sequence', true);
@@ -6520,14 +6649,19 @@ function handle_change_order_moderator_ajax() {
  $order_note = sprintf(
  'Assigned moderator changed from %s to %s (Moderator %s) by admin: %s',
  $old_moderator_name ?: 'None',
- $new_moderator->display_name,
+ $moderator->display_name,
  $new_moderator_sequence ?: 'N/A',
  wp_get_current_user()->display_name
  );
  
  $order->add_order_note($order_note);
  
- wp_send_json_success('Moderator updated successfully');
+ wp_send_json_success(array(
+ 'message' => 'User changed successfully.',
+ 'new_moderator_id' => $new_moderator_id,
+ 'new_moderator_name' => $moderator->display_name,
+ 'new_moderator_sequence' => $new_moderator_sequence,
+ ));
 }
 
 
