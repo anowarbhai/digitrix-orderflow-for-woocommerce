@@ -3397,6 +3397,10 @@ function moderator_recent_assignments_page() {
  });
  }
 
+ window.aoamRefreshSimpleOrders = function() {
+ loadSimpleOrders(collectParamsFromUrl(), false);
+ };
+
  $app.on('submit', '.aoam-filter-form', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
@@ -6600,7 +6604,9 @@ function get_moderator_order_details_simple_fixed() {
  // Update status display in MODAL ONLY
  $('#current_status_display').text(response.data.new_status_label);
  
- if (window.aoamRefreshRecentAssignments) {
+ if (window.aoamRefreshSimpleOrders) {
+ window.aoamRefreshSimpleOrders();
+ } else if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
  closeOrderModal();
@@ -6644,7 +6650,9 @@ function get_moderator_order_details_simple_fixed() {
  if (response.success) {
  var message = response.data && response.data.message ? response.data.message : 'User changed successfully!';
  $('#moderator_change_message').html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
- if (window.aoamRefreshRecentAssignments) {
+ if (window.aoamRefreshSimpleOrders) {
+ window.aoamRefreshSimpleOrders();
+ } else if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
  closeOrderModal();
