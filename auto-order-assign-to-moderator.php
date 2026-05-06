@@ -3466,13 +3466,7 @@ function moderator_recent_assignments_page() {
  $message.html('<div style="color: #1f8f3a; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + response.data.message + '</div>').show();
  $('#current_status_display').text(response.data.new_status_label);
  aoamRefreshRecentAssignments();
- if (modalOrderId) {
- setTimeout(function() {
- if (modalOrderId && $('#order-details-modal').is(':visible')) {
- viewOrderDetails(modalOrderId);
- }
- }, 500);
- }
+ closeOrderModal();
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'Update failed') + '</div>').show();
  }
@@ -3505,13 +3499,7 @@ function moderator_recent_assignments_page() {
  var message = response.data && response.data.message ? response.data.message : 'User changed successfully.';
  $message.html('<div style="color: #1f8f3a; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
  aoamRefreshRecentAssignments();
- if (modalOrderId) {
- setTimeout(function() {
- if (modalOrderId && $('#order-details-modal').is(':visible')) {
- viewOrderDetails(modalOrderId);
- }
- }, 500);
- }
+ closeOrderModal();
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'User change failed') + '</div>').show();
  }
@@ -6496,6 +6484,7 @@ function get_moderator_order_details_simple_fixed() {
  if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
+ closeOrderModal();
  
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;"> ' + response.data + '</div>').show();
@@ -6539,6 +6528,7 @@ function get_moderator_order_details_simple_fixed() {
  if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
+ closeOrderModal();
  } else {
  alert('Error: ' + response.data);
  $button.text('Change User').prop('disabled', false);
