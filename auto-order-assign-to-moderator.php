@@ -3318,12 +3318,12 @@ function moderator_recent_assignments_page() {
 
  window.viewOrderDetails = function(orderId) {
  modalOrderId = orderId;
+ $('.modal-backdrop').remove();
  $('#modal-order-id').text(orderId);
  $('#order-details-content').html("<div style='text-align: center; padding: 40px;'><div class='spinner is-active' style='float: none;'></div><p>Loading order details...</p></div>");
- if (!$('.modal-backdrop').length) {
  $('body').append('<div class="modal-backdrop"></div>');
- }
  $('#order-details-modal').show();
+ $('body').addClass('aoam-modal-open');
 
  $.ajax({
  url: ajaxurl,
@@ -3346,8 +3346,10 @@ function moderator_recent_assignments_page() {
  };
 
  window.closeOrderModal = function() {
- $('#order-details-modal').hide();
+ modalOrderId = null;
+ $('#order-details-modal, .aoam-order-modal').hide();
  $('.modal-backdrop').remove();
+ $('body').removeClass('aoam-modal-open');
  };
 
  var searchParams = params || collectParamsFromUrl();
@@ -3454,7 +3456,11 @@ function moderator_recent_assignments_page() {
  $('#current_status_display').text(response.data.new_status_label);
  aoamRefreshRecentAssignments();
  if (modalOrderId) {
- setTimeout(function() { viewOrderDetails(modalOrderId); }, 500);
+ setTimeout(function() {
+ if (modalOrderId && $('#order-details-modal').is(':visible')) {
+ viewOrderDetails(modalOrderId);
+ }
+ }, 500);
  }
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'Update failed') + '</div>').show();
@@ -3489,7 +3495,11 @@ function moderator_recent_assignments_page() {
  $message.html('<div style="color: #1f8f3a; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
  aoamRefreshRecentAssignments();
  if (modalOrderId) {
- setTimeout(function() { viewOrderDetails(modalOrderId); }, 500);
+ setTimeout(function() {
+ if (modalOrderId && $('#order-details-modal').is(':visible')) {
+ viewOrderDetails(modalOrderId);
+ }
+ }, 500);
  }
  } else {
  $message.html('<div style="color: #cc1818; padding: 8px; background: #ffe5e5; border-radius: 4px;">' + (response.data || 'User change failed') + '</div>').show();
@@ -4439,6 +4449,9 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  bottom: 0;
  background: rgba(0,0,0,0.5);
  z-index: 9999;
+ }
+ body:not(.aoam-modal-open) .modal-backdrop {
+ display: none !important;
  }
  </style>
  
