@@ -4663,6 +4663,43 @@ function aoam_hide_admin_bar_for_assigned_roles($show) {
  return $show;
 }
 
+add_action('admin_head', 'aoam_hide_wp_admin_toolbar_on_simple_orders');
+function aoam_hide_wp_admin_toolbar_on_simple_orders() {
+ if (($_GET['page'] ?? '') !== 'moderator-simple-orders') {
+ return;
+ }
+
+ $current_user = wp_get_current_user();
+ $assigned_roles = aoam_get_assigned_roles();
+ $user_has_role = !empty(array_intersect((array) $current_user->roles, $assigned_roles));
+
+ if (!$user_has_role || current_user_can('manage_options')) {
+ return;
+ }
+ ?>
+ <style>
+ #wpadminbar {
+ display: none !important;
+ }
+ html.wp-toolbar {
+ padding-top: 0 !important;
+ }
+ body.admin-bar #wpwrap,
+ body.admin-bar #wpcontent {
+ padding-top: 0 !important;
+ }
+ @media (max-width: 782px) {
+ html.wp-toolbar {
+ padding-top: 0 !important;
+ }
+ #wpwrap {
+ margin-top: 0 !important;
+ }
+ }
+ </style>
+ <?php
+}
+
 function simple_moderator_orders_page() {
  ?>
  <div class="wrap">
