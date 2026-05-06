@@ -3409,12 +3409,6 @@ function moderator_recent_assignments_page() {
  loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
  });
 
- $app.on('click', '.aoam-apply-filters', function(e) {
- e.preventDefault();
- e.stopImmediatePropagation();
- loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
- });
-
  $app.on('click', '.tablenav-pages a, .aoam-soft-button, .aoam-reset-filters', function(e) {
  var href = $(this).attr('href');
  if (!href) {
@@ -3911,11 +3905,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <option value="100" <?php selected($per_page, 100); ?>>100</option>
  </select>
  </div>
- 
- <div class="filter-group aoam-filter-actions">
- <button type="button" class="button button-primary aoam-apply-filters">Apply Filters</button>
- <a href="?page=moderator-recent-assignments" class="button button-secondary aoam-reset-filters">Reset Filters</a>
- </div>
  </form>
  </div>
  </div>
@@ -4281,7 +4270,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  .aoam-filter-form {
  display: grid;
- grid-template-columns: repeat(4, minmax(170px, 1fr));
+ grid-template-columns: repeat(4, minmax(190px, 1fr));
  gap: 14px;
  align-items: end;
  }
@@ -4301,16 +4290,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  min-height: 36px;
  border-color: #c3c4c7;
  border-radius: 6px;
- }
- .aoam-filter-actions {
- flex-direction: row !important;
- gap: 8px;
- align-items: center;
- }
- .aoam-filter-actions .button {
- min-height: 36px;
- display: inline-flex;
- align-items: center;
  }
  span.current-page.button {
  background-color: #ddd;
@@ -4432,12 +4411,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  .aoam-stats-grid,
  .aoam-filter-form {
  grid-template-columns: 1fr;
- }
- .aoam-filter-actions {
- align-items: stretch;
- }
- .aoam-filter-actions .button {
- justify-content: center;
  }
  }
  .modal-backdrop {
