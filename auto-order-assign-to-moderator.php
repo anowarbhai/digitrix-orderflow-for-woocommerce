@@ -4688,12 +4688,34 @@ function aoam_hide_wp_admin_toolbar_on_simple_orders() {
  body.admin-bar #wpcontent {
  padding-top: 0 !important;
  }
+ #wpcontent,
+ #wpbody,
+ #wpbody-content {
+ padding-top: 0 !important;
+ }
+ #wpcontent {
+ margin-top: 0 !important;
+ }
+ #wpbody-content > .wrap:first-child,
+ .wrap:first-child {
+ margin-top: 10px !important;
+ }
  @media (max-width: 782px) {
  html.wp-toolbar {
  padding-top: 0 !important;
  }
  #wpwrap {
  margin-top: 0 !important;
+ }
+ #wpcontent {
+ padding-left: 0 !important;
+ }
+ #wpbody-content {
+ padding-bottom: 0 !important;
+ }
+ #wpbody-content > .wrap:first-child,
+ .wrap:first-child {
+ margin-top: 6px !important;
  }
  }
  </style>
