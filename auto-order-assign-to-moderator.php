@@ -1182,6 +1182,22 @@ function aoam_cleanup_stale_delayed_assignment_events() {
 
 // Also run assignment immediately when order status changes to complete statuses
 add_action('woocommerce_order_status_changed', 'handle_order_status_change_assignment', 10, 4);
+add_action('woocommerce_order_status_changed', 'aoam_track_terminal_status_transition', 8, 4);
+
+function aoam_track_terminal_status_transition($order_id, $from_status, $to_status, $order) {
+ $tracked_from_statuses = array('processing', 'partial');
+ $tracked_to_statuses = array('completed', 'cancelled');
+ $from_status = sanitize_key($from_status);
+ $to_status = sanitize_key($to_status);
+
+ if (!in_array($from_status, $tracked_from_statuses, true) || !in_array($to_status, $tracked_to_statuses, true)) {
+ return;
+ }
+
+ update_post_meta($order_id, '_aoam_terminal_transition_from', $from_status);
+ update_post_meta($order_id, '_aoam_terminal_transition_to', $to_status);
+ update_post_meta($order_id, '_aoam_terminal_transition_at_gmt', gmdate('Y-m-d H:i:s'));
+}
 
 function handle_order_status_change_assignment($order_id, $from_status, $to_status, $order) {
  // Define statuses that should trigger immediate assignment
@@ -3679,6 +3695,53 @@ function aoam_get_recent_assignments_date_range($date_filter, $custom_start_date
  return $range;
 }
 
+function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $orders_meta_table, $orders_meta_table_exists) {
+ global $wpdb;
+
+ $orders_table = $wpdb->prefix . 'wc_orders';
+ $flow_counts = array(
+ 'processing' => array('completed' => 0, 'cancelled' => 0),
+ 'partial' => array('completed' => 0, 'cancelled' => 0),
+ );
+
+ foreach ($flow_counts as $from_status => $to_statuses) {
+ foreach ($to_statuses as $to_status => $unused_count) {
+ $flow_where = array($base_where_sql, 'o.status = %s');
+ $flow_params = $base_params;
+ $flow_params[] = 'wc-' . $to_status;
+ $transition_meta_where = array(
+ "EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} transition_pm
+ WHERE transition_pm.post_id = pm.post_id
+ AND transition_pm.meta_key = '_aoam_terminal_transition_from'
+ AND transition_pm.meta_value = %s
+ )"
+ );
+ $flow_params[] = $from_status;
+
+ if ($orders_meta_table_exists) {
+ $transition_meta_where[] = "EXISTS (
+ SELECT 1 FROM {$orders_meta_table} transition_om
+ WHERE transition_om.order_id = pm.post_id
+ AND transition_om.meta_key = '_aoam_terminal_transition_from'
+ AND transition_om.meta_value = %s
+ )";
+ $flow_params[] = $from_status;
+ }
+
+ $flow_where[] = '(' . implode(' OR ', $transition_meta_where) . ')';
+ $flow_counts[$from_status][$to_status] = (int) $wpdb->get_var($wpdb->prepare("
+ SELECT COUNT(DISTINCT pm.post_id)
+ FROM {$wpdb->postmeta} pm
+ INNER JOIN {$orders_table} o ON o.id = pm.post_id
+ WHERE " . implode(' AND ', $flow_where) . "
+ ", $flow_params));
+ }
+ }
+
+ return $flow_counts;
+}
+
 function aoam_render_recent_assignments_page_content($ajax_request = false) {
  // ADD: Get assigned roles dynamically
  $assigned_roles = aoam_get_assigned_roles();
@@ -3896,6 +3959,11 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  INNER JOIN {$orders_table} o ON o.id = pm.post_id
  WHERE " . implode(' AND ', $today_where) . "
  ", $today_params));
+ $flow_counts = aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $orders_meta_table, $orders_meta_table_exists);
+ $processing_flow_total = array_sum($flow_counts['processing']);
+ $partial_flow_total = array_sum($flow_counts['partial']);
+ $flow_total = $processing_flow_total + $partial_flow_total;
+ $flow_max_value = max(1, $flow_counts['processing']['completed'], $flow_counts['processing']['cancelled'], $flow_counts['partial']['completed'], $flow_counts['partial']['cancelled']);
 
  $query_where = $base_where;
  $query_params = $base_params;
@@ -3963,6 +4031,71 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <strong><?php echo esc_html(number_format_i18n(count($moderators))); ?></strong>
  <small>Total Users</small>
  </div>
+ </div>
+ </div>
+
+ <div class="aoam-flow-panel">
+ <div class="aoam-section-heading aoam-section-heading-small">
+ <div>
+ <h3>Completion & Cancellation Flow</h3>
+ <p>Tracks orders that moved from Processing or Partial into Completed or Cancelled.</p>
+ </div>
+ <div class="aoam-flow-total">
+ <span><?php echo esc_html(number_format_i18n($flow_total)); ?></span>
+ <small>Tracked changes</small>
+ </div>
+ </div>
+ <div class="aoam-flow-grid">
+ <div class="aoam-flow-card aoam-flow-processing">
+ <span class="dashicons dashicons-update"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($processing_flow_total)); ?></strong>
+ <small>From Processing</small>
+ </div>
+ </div>
+ <div class="aoam-flow-card aoam-flow-completed">
+ <span class="dashicons dashicons-yes-alt"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($flow_counts['processing']['completed'] + $flow_counts['partial']['completed'])); ?></strong>
+ <small>Total Completed</small>
+ </div>
+ </div>
+ <div class="aoam-flow-card aoam-flow-cancelled">
+ <span class="dashicons dashicons-dismiss"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($flow_counts['processing']['cancelled'] + $flow_counts['partial']['cancelled'])); ?></strong>
+ <small>Total Cancelled</small>
+ </div>
+ </div>
+ <div class="aoam-flow-card aoam-flow-partial">
+ <span class="dashicons dashicons-clock"></span>
+ <div>
+ <strong><?php echo esc_html(number_format_i18n($partial_flow_total)); ?></strong>
+ <small>From Partial</small>
+ </div>
+ </div>
+ </div>
+ <div class="aoam-flow-bars">
+ <?php
+ $flow_bar_rows = array(
+ array('label' => 'Processing to Completed', 'value' => $flow_counts['processing']['completed'], 'class' => 'completed'),
+ array('label' => 'Processing to Cancelled', 'value' => $flow_counts['processing']['cancelled'], 'class' => 'cancelled'),
+ array('label' => 'Partial to Completed', 'value' => $flow_counts['partial']['completed'], 'class' => 'completed'),
+ array('label' => 'Partial to Cancelled', 'value' => $flow_counts['partial']['cancelled'], 'class' => 'cancelled'),
+ );
+ foreach ($flow_bar_rows as $flow_row):
+ $bar_width = max(4, round(((int) $flow_row['value'] / $flow_max_value) * 100));
+ ?>
+ <div class="aoam-flow-bar-row">
+ <div class="aoam-flow-bar-meta">
+ <span><?php echo esc_html($flow_row['label']); ?></span>
+ <strong><?php echo esc_html(number_format_i18n($flow_row['value'])); ?></strong>
+ </div>
+ <div class="aoam-flow-bar-track">
+ <div class="aoam-flow-bar-fill aoam-flow-bar-<?php echo esc_attr($flow_row['class']); ?>" style="width: <?php echo esc_attr($bar_width); ?>%;"></div>
+ </div>
+ </div>
+ <?php endforeach; ?>
  </div>
  </div>
  
@@ -4454,6 +4587,102 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  padding-top: 18px;
  border-top: 1px solid #edf0f2;
  }
+ .aoam-flow-panel {
+ margin-top: 22px;
+ padding: 18px;
+ border: 1px solid #d8e7ff;
+ border-left: 4px solid #2271b1;
+ border-radius: 8px;
+ background: linear-gradient(180deg, #f8fbff 0%, #fff 100%);
+ }
+ .aoam-flow-total {
+ text-align: right;
+ color: #50575e;
+ }
+ .aoam-flow-total span {
+ display: block;
+ color: #1d2327;
+ font-size: 24px;
+ font-weight: 800;
+ line-height: 1;
+ }
+ .aoam-flow-total small {
+ display: block;
+ margin-top: 4px;
+ font-weight: 600;
+ }
+ .aoam-flow-grid {
+ display: grid;
+ grid-template-columns: repeat(4, minmax(160px, 1fr));
+ gap: 12px;
+ margin-bottom: 18px;
+ }
+ .aoam-flow-card {
+ display: flex;
+ align-items: center;
+ gap: 12px;
+ min-height: 86px;
+ padding: 16px;
+ border: 1px solid #e1e8f0;
+ border-radius: 8px;
+ background: #fff;
+ }
+ .aoam-flow-card .dashicons {
+ width: 36px;
+ height: 36px;
+ border-radius: 10px;
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
+ font-size: 19px;
+ }
+ .aoam-flow-card strong {
+ display: block;
+ font-size: 28px;
+ line-height: 1;
+ color: #1d2327;
+ }
+ .aoam-flow-card small {
+ display: block;
+ margin-top: 5px;
+ color: #646970;
+ font-weight: 700;
+ }
+ .aoam-flow-processing .dashicons { background: #e7f3ff; color: #2271b1; }
+ .aoam-flow-partial .dashicons { background: #f0f0f1; color: #50575e; }
+ .aoam-flow-completed .dashicons { background: #e5f7e5; color: #1f8f3a; }
+ .aoam-flow-cancelled .dashicons { background: #ffecec; color: #cc1818; }
+ .aoam-flow-bars {
+ display: grid;
+ grid-template-columns: repeat(2, minmax(240px, 1fr));
+ gap: 14px 18px;
+ }
+ .aoam-flow-bar-meta {
+ display: flex;
+ justify-content: space-between;
+ align-items: center;
+ gap: 10px;
+ margin-bottom: 7px;
+ color: #50575e;
+ font-weight: 700;
+ }
+ .aoam-flow-bar-meta strong {
+ color: #1d2327;
+ font-size: 16px;
+ }
+ .aoam-flow-bar-track {
+ height: 12px;
+ overflow: hidden;
+ border-radius: 999px;
+ background: #edf0f2;
+ }
+ .aoam-flow-bar-fill {
+ height: 100%;
+ border-radius: inherit;
+ min-width: 4px;
+ }
+ .aoam-flow-bar-completed { background: #22c55e; }
+ .aoam-flow-bar-cancelled { background: #ef4444; }
  .aoam-status-grid {
  display: flex;
  flex-wrap: wrap;
@@ -4680,6 +4909,8 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  @media (max-width: 1200px) {
  .aoam-stats-grid,
+ .aoam-flow-grid,
+ .aoam-flow-bars,
  .aoam-filter-form {
  grid-template-columns: repeat(2, minmax(180px, 1fr));
  }
@@ -4692,8 +4923,13 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  flex-direction: column;
  }
  .aoam-stats-grid,
+ .aoam-flow-grid,
+ .aoam-flow-bars,
  .aoam-filter-form {
  grid-template-columns: 1fr;
+ }
+ .aoam-flow-total {
+ text-align: left;
  }
  }
  .modal-backdrop {
