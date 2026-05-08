@@ -317,13 +317,38 @@ add_action('aoam_remote_order_import_cron', 'aoam_import_remote_orders_cron');
 function aoam_import_remote_orders_cron() {
  $settings = aoam_get_remote_import_settings();
  if (($settings['enabled'] ?? 'yes') !== 'yes') {
- return;
+  return;
  }
  $result = aoam_import_remote_orders();
  update_option('aoam_remote_import_last_run', array(
+ 'timestamp' => time(),
  'time' => current_time('mysql'),
  'result' => is_wp_error($result) ? $result->get_error_message() : $result,
  ));
+}
+
+add_action('admin_init', 'aoam_maybe_run_remote_order_import_fallback');
+function aoam_maybe_run_remote_order_import_fallback() {
+ if (wp_doing_ajax() || wp_doing_cron()) {
+  return;
+ }
+ if (!current_user_can('manage_woocommerce') && !current_user_can('manage_options')) {
+  return;
+ }
+ $settings = aoam_get_remote_import_settings();
+ if (($settings['enabled'] ?? 'yes') !== 'yes') {
+  return;
+ }
+ if (get_transient('aoam_remote_order_import_fallback_lock')) {
+  return;
+ }
+ $last_run = get_option('aoam_remote_import_last_run', array());
+ $last_timestamp = absint($last_run['timestamp'] ?? 0);
+ if ($last_timestamp && (time() - $last_timestamp) < 300) {
+  return;
+ }
+ set_transient('aoam_remote_order_import_fallback_lock', 1, 300);
+ aoam_import_remote_orders_cron();
 }
 
 function aoam_sanitize_remote_import_sources($raw_sources) {
