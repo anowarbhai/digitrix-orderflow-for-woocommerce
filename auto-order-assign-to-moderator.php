@@ -858,13 +858,17 @@ function aoam_get_display_timezone() {
  return new DateTimeZone('Asia/Dhaka');
 }
 
+function aoam_format_display_date($format, $timestamp = null) {
+ return wp_date($format, $timestamp ?: time(), aoam_get_display_timezone());
+}
+
 function aoam_format_order_local_date($order, $format) {
  $timestamp = aoam_get_order_local_timestamp($order);
  if (!$timestamp) {
  return '';
  }
 
- return wp_date($format, $timestamp, aoam_get_display_timezone());
+ return aoam_format_display_date($format, $timestamp);
 }
 
 function aoam_order_has_moderator_assignment($order_id) {
@@ -5311,9 +5315,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  // Get orders assigned to this user
  global $wpdb;
  
- // Get WordPress timezone
- $timezone = wp_timezone();
- $today_date = current_time('Y-m-d'); // Use WordPress current time
+ $today_date = aoam_format_display_date('Y-m-d');
  
  // Base query for order IDs - SIMPLIFIED
  $query = $wpdb->prepare(
@@ -5453,7 +5455,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  </form>
  <?php if ($date_filter === 'today'): ?>
  <div class="orders-filter-note">
- <strong>Showing orders from:</strong> <?php echo esc_html(date_i18n('F j, Y')); ?>
+ <strong>Showing orders from:</strong> <?php echo esc_html(aoam_format_display_date('F j, Y')); ?>
  </div>
  <?php endif; ?>
  </div>
@@ -5539,9 +5541,9 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  .
  <?php endif; ?>
  <?php elseif ($date_filter === 'today' && $status_filter !== 'all'): ?>
- No <?php echo $status_filter; ?> orders found for today (<?php echo date_i18n('F j, Y'); ?>).
+ No <?php echo $status_filter; ?> orders found for today (<?php echo esc_html(aoam_format_display_date('F j, Y')); ?>).
  <?php elseif ($date_filter === 'today'): ?>
- No orders found for today (<?php echo date_i18n('F j, Y'); ?>).
+ No orders found for today (<?php echo esc_html(aoam_format_display_date('F j, Y')); ?>).
  <?php elseif ($status_filter !== 'all'): ?>
  No orders found with status: <?php echo $status_filter; ?>.
  <?php else: ?>
@@ -5574,7 +5576,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  }
  
  if ($date_filter === 'today') {
- echo ' (From: ' . date_i18n('F j, Y') . ')';
+ echo ' (From: ' . esc_html(aoam_format_display_date('F j, Y')) . ')';
  }
  ?>
  </h3>
@@ -5755,7 +5757,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  $customer_phone = $order->get_shipping_phone();
  }
  $order_date_timestamp = aoam_get_order_local_timestamp($order);
- $time_ago = $order_date_timestamp ? human_time_diff($order_date_timestamp, current_time('timestamp')) . ' ago' : '';
+ $time_ago = $order_date_timestamp ? human_time_diff($order_date_timestamp, time()) . ' ago' : '';
  ?>
  <article class="mobile-order-card" data-order-id="<?php echo esc_attr($order->get_id()); ?>">
  <div class="mobile-card-top">
