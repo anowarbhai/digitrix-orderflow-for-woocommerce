@@ -3992,7 +3992,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div class="assignment-filters">
  <form method="get" class="aoam-filter-form" action="<?php echo esc_url(admin_url('admin.php')); ?>">
  <input type="hidden" name="page" value="moderator-recent-assignments">
- <div class="filter-group aoam-search-field">
+ <div class="filter-group aoam-search-field aoam-filter-row-primary">
  <label for="order_search">Search Orders</label>
  <div class="aoam-search-control">
  <span class="dashicons dashicons-search"></span>
@@ -4031,7 +4031,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </select>
  </div>
 
- <div class="filter-group">
+ <div class="filter-group aoam-date-filter-field aoam-filter-row-primary">
  <label for="assignment_date_filter">Date</label>
  <select name="assignment_date_filter" id="assignment_date_filter">
  <option value="all" <?php selected($assignment_date_filter, 'all'); ?>>All Times</option>
@@ -4043,12 +4043,12 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </select>
  </div>
 
- <div class="filter-group aoam-custom-date-field" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
+ <div class="filter-group aoam-custom-date-field aoam-filter-row-primary" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
  <label for="custom_start_date">Start Date</label>
  <input type="date" name="custom_start_date" id="custom_start_date" value="<?php echo esc_attr($custom_start_date); ?>">
  </div>
 
- <div class="filter-group aoam-custom-date-field" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
+ <div class="filter-group aoam-custom-date-field aoam-filter-row-primary" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
  <label for="custom_end_date">End Date</label>
  <input type="date" name="custom_end_date" id="custom_end_date" value="<?php echo esc_attr($custom_end_date); ?>">
  </div>
@@ -4446,7 +4446,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  .aoam-filter-form {
  display: grid;
- grid-template-columns: repeat(4, minmax(190px, 1fr));
+ grid-template-columns: 1.35fr 1fr 1fr 1fr;
  gap: 14px;
  align-items: end;
  }
@@ -4484,7 +4484,14 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  padding: 0 10px;
  }
  .aoam-search-field {
- grid-column: span 2;
+ grid-column: span 1;
+ }
+ .aoam-filter-row-primary {
+ grid-row: 1;
+ }
+ .aoam-date-filter-field,
+ .aoam-custom-date-field {
+ grid-column: span 1;
  }
  .aoam-search-control {
  display: flex;
