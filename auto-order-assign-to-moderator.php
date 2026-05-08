@@ -3375,6 +3375,7 @@ function moderator_recent_assignments_page() {
  moderator_filter: searchParams.get('moderator_filter') || '0',
  source_filter: searchParams.get('source_filter') || 'all',
  status_filter: searchParams.get('status_filter') || 'all',
+ order_search: searchParams.get('order_search') || '',
  per_page: searchParams.get('per_page') || '20',
  paged: searchParams.get('paged') || '1'
  }
@@ -3406,6 +3407,11 @@ function moderator_recent_assignments_page() {
  $app.on('change', '.aoam-filter-form select', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
+ loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
+ });
+
+ $app.on('search', '.aoam-filter-form input[type="search"]', function(e) {
+ e.preventDefault();
  loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
  });
 
@@ -3552,6 +3558,7 @@ function aoam_recent_assignments_ajax() {
  $_GET['moderator_filter'] = isset($_POST['moderator_filter']) ? absint($_POST['moderator_filter']) : 0;
  $_GET['source_filter'] = isset($_POST['source_filter']) ? sanitize_key($_POST['source_filter']) : 'all';
  $_GET['status_filter'] = isset($_POST['status_filter']) ? sanitize_key($_POST['status_filter']) : 'all';
+ $_GET['order_search'] = isset($_POST['order_search']) ? sanitize_text_field(wp_unslash($_POST['order_search'])) : '';
  $_GET['per_page'] = isset($_POST['per_page']) ? absint($_POST['per_page']) : 20;
  $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
 
@@ -3584,6 +3591,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $source_filter = 'all';
  }
  $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+ $order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
  
  // CHANGED: Get per_page from GET parameter
  $per_page = isset($_GET['per_page']) ? absint($_GET['per_page']) : 20;
@@ -3643,7 +3651,9 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  global $wpdb;
  $orders_table = $wpdb->prefix . 'wc_orders';
  $orders_meta_table = $wpdb->prefix . 'wc_orders_meta';
+ $order_addresses_table = $wpdb->prefix . 'wc_order_addresses';
  $orders_meta_table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $orders_meta_table)) === $orders_meta_table;
+ $order_addresses_table_exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $order_addresses_table)) === $order_addresses_table;
  $base_where = array(
  'pm.meta_key = %s',
  'o.type = %s',
@@ -3692,6 +3702,40 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $base_params[] = $source_filter . ':%';
  }
  $base_where[] = '(' . implode(' OR ', $remote_source_where) . ')';
+ }
+
+ if ($order_search !== '') {
+ $search_like = '%' . $wpdb->esc_like($order_search) . '%';
+ $search_where = array('CAST(o.id AS CHAR) LIKE %s');
+ $base_params[] = $search_like;
+
+ if ($order_addresses_table_exists) {
+ $search_where[] = "EXISTS (
+ SELECT 1 FROM {$order_addresses_table} billing_address
+ WHERE billing_address.order_id = o.id
+ AND billing_address.address_type = 'billing'
+ AND (
+ billing_address.first_name LIKE %s
+ OR billing_address.last_name LIKE %s
+ OR CONCAT_WS(' ', billing_address.first_name, billing_address.last_name) LIKE %s
+ OR billing_address.phone LIKE %s
+ )
+ )";
+ $base_params[] = $search_like;
+ $base_params[] = $search_like;
+ $base_params[] = $search_like;
+ $base_params[] = $search_like;
+ }
+
+ $search_where[] = "EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} billing_pm
+ WHERE billing_pm.post_id = pm.post_id
+ AND billing_pm.meta_key IN ('_billing_first_name', '_billing_last_name', '_billing_phone')
+ AND billing_pm.meta_value LIKE %s
+ )";
+ $base_params[] = $search_like;
+
+ $base_where[] = '(' . implode(' OR ', $search_where) . ')';
  }
 
  $base_where_sql = implode(' AND ', $base_where);
@@ -3852,6 +3896,13 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div class="assignment-filters">
  <form method="get" class="aoam-filter-form" action="<?php echo esc_url(admin_url('admin.php')); ?>">
  <input type="hidden" name="page" value="moderator-recent-assignments">
+ <div class="filter-group aoam-search-field">
+ <label for="order_search">Search Orders</label>
+ <div class="aoam-search-control">
+ <input type="search" name="order_search" id="order_search" value="<?php echo esc_attr($order_search); ?>" placeholder="Order ID, customer name, phone">
+ <button type="submit" class="button button-primary">Search</button>
+ </div>
+ </div>
  
  <div class="filter-group">
  <label for="moderator_filter">Filter by User</label> 
@@ -3905,6 +3956,18 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <option value="100" <?php selected($per_page, 100); ?>>100</option>
  </select>
  </div>
+ <?php if ($order_search !== ''): ?>
+ <div class="filter-group aoam-search-clear">
+ <label>&nbsp;</label>
+ <a href="<?php echo esc_url(add_query_arg(array(
+ 'page' => 'moderator-recent-assignments',
+ 'moderator_filter' => $moderator_filter,
+ 'source_filter' => $source_filter,
+ 'status_filter' => $status_filter,
+ 'per_page' => $per_page,
+ ), admin_url('admin.php'))); ?>" class="button aoam-reset-filters">Clear Search</a>
+ </div>
+ <?php endif; ?>
  </form>
  </div>
  </div>
@@ -4036,6 +4099,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  'moderator_filter' => $moderator_filter,
  'status_filter' => $status_filter,
  'source_filter' => $source_filter,
+ 'order_search' => $order_search,
  'per_page' => $per_page,
  ), admin_url('admin.php'));
  
@@ -4290,6 +4354,35 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  min-height: 36px;
  border-color: #c3c4c7;
  border-radius: 6px;
+ }
+ .aoam-filter-form .filter-group input[type="search"] {
+ width: 100%;
+ max-width: none;
+ min-height: 36px;
+ border: 1px solid #c3c4c7;
+ border-radius: 6px;
+ padding: 0 10px;
+ }
+ .aoam-search-field {
+ grid-column: span 2;
+ }
+ .aoam-search-control {
+ display: flex;
+ gap: 8px;
+ }
+ .aoam-search-control input {
+ flex: 1 1 auto;
+ }
+ .aoam-search-control .button {
+ min-height: 36px;
+ display: inline-flex;
+ align-items: center;
+ }
+ .aoam-search-clear .button {
+ min-height: 36px;
+ display: inline-flex;
+ align-items: center;
+ justify-content: center;
  }
  span.current-page.button {
  background-color: #ddd;
