@@ -851,7 +851,11 @@ function aoam_get_order_local_timestamp($order) {
  return false;
  }
 
- return $date_created->getTimestamp() + $date_created->getOffset();
+ return $date_created->getTimestamp();
+}
+
+function aoam_get_display_timezone() {
+ return new DateTimeZone('Asia/Dhaka');
 }
 
 function aoam_format_order_local_date($order, $format) {
@@ -860,7 +864,7 @@ function aoam_format_order_local_date($order, $format) {
  return '';
  }
 
- return wp_date($format, $timestamp);
+ return wp_date($format, $timestamp, aoam_get_display_timezone());
 }
 
 function aoam_order_has_moderator_assignment($order_id) {
