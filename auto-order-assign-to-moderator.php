@@ -3709,27 +3709,27 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  $flow_where = array($base_where_sql, 'o.status = %s');
  $flow_params = $base_params;
  $flow_params[] = 'wc-' . $to_status;
- $transition_meta_where = array(
+ $origin_meta_where = array(
  "EXISTS (
- SELECT 1 FROM {$wpdb->postmeta} transition_pm
- WHERE transition_pm.post_id = pm.post_id
- AND transition_pm.meta_key = '_aoam_terminal_transition_from'
- AND transition_pm.meta_value = %s
+ SELECT 1 FROM {$wpdb->postmeta} origin_pm
+ WHERE origin_pm.post_id = pm.post_id
+ AND origin_pm.meta_key IN ('_aoam_terminal_transition_from', '_sequence_type')
+ AND origin_pm.meta_value = %s
  )"
  );
  $flow_params[] = $from_status;
 
  if ($orders_meta_table_exists) {
- $transition_meta_where[] = "EXISTS (
- SELECT 1 FROM {$orders_meta_table} transition_om
- WHERE transition_om.order_id = pm.post_id
- AND transition_om.meta_key = '_aoam_terminal_transition_from'
- AND transition_om.meta_value = %s
+ $origin_meta_where[] = "EXISTS (
+ SELECT 1 FROM {$orders_meta_table} origin_om
+ WHERE origin_om.order_id = pm.post_id
+ AND origin_om.meta_key IN ('_aoam_terminal_transition_from', '_sequence_type')
+ AND origin_om.meta_value = %s
  )";
  $flow_params[] = $from_status;
  }
 
- $flow_where[] = '(' . implode(' OR ', $transition_meta_where) . ')';
+ $flow_where[] = '(' . implode(' OR ', $origin_meta_where) . ')';
  $flow_counts[$from_status][$to_status] = (int) $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(DISTINCT pm.post_id)
  FROM {$wpdb->postmeta} pm
