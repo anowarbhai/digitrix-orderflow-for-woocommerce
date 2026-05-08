@@ -3376,6 +3376,9 @@ function moderator_recent_assignments_page() {
  source_filter: searchParams.get('source_filter') || 'all',
  status_filter: searchParams.get('status_filter') || 'all',
  order_search: searchParams.get('order_search') || '',
+ assignment_date_filter: searchParams.get('assignment_date_filter') || 'all',
+ custom_start_date: searchParams.get('custom_start_date') || '',
+ custom_end_date: searchParams.get('custom_end_date') || '',
  per_page: searchParams.get('per_page') || '20',
  paged: searchParams.get('paged') || '1'
  }
@@ -3408,6 +3411,15 @@ function moderator_recent_assignments_page() {
  e.preventDefault();
  e.stopImmediatePropagation();
  loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
+ });
+
+ $app.on('change', '.aoam-filter-form input[type="date"]', function(e) {
+ e.preventDefault();
+ e.stopImmediatePropagation();
+ var $form = $(this).closest('form');
+ if ($('#assignment_date_filter').val() === 'custom' && $('#custom_start_date').val() && $('#custom_end_date').val()) {
+ loadRecentAssignments(collectParamsFromForm($form), true);
+ }
  });
 
  $app.on('search', '.aoam-filter-form input[type="search"]', function(e) {
@@ -3559,12 +3571,55 @@ function aoam_recent_assignments_ajax() {
  $_GET['source_filter'] = isset($_POST['source_filter']) ? sanitize_key($_POST['source_filter']) : 'all';
  $_GET['status_filter'] = isset($_POST['status_filter']) ? sanitize_key($_POST['status_filter']) : 'all';
  $_GET['order_search'] = isset($_POST['order_search']) ? sanitize_text_field(wp_unslash($_POST['order_search'])) : '';
+ $_GET['assignment_date_filter'] = isset($_POST['assignment_date_filter']) ? sanitize_key($_POST['assignment_date_filter']) : 'all';
+ $_GET['custom_start_date'] = isset($_POST['custom_start_date']) ? sanitize_text_field(wp_unslash($_POST['custom_start_date'])) : '';
+ $_GET['custom_end_date'] = isset($_POST['custom_end_date']) ? sanitize_text_field(wp_unslash($_POST['custom_end_date'])) : '';
  $_GET['per_page'] = isset($_POST['per_page']) ? absint($_POST['per_page']) : 20;
  $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
 
  ob_start();
  aoam_render_recent_assignments_page_content(true);
  wp_send_json_success(array('html' => ob_get_clean()));
+}
+
+function aoam_get_recent_assignments_date_range($date_filter, $custom_start_date = '', $custom_end_date = '') {
+ $timezone = wp_timezone();
+ $now = new DateTimeImmutable('now', $timezone);
+ $range = array('start_gmt' => '', 'end_gmt' => '');
+
+ if ($date_filter === 'today') {
+ $end = $now->setTime(22, 0, 0);
+ if ($now > $end) {
+ $end = $end->modify('+1 day');
+ }
+ $start = $end->modify('-1 day');
+ } elseif ($date_filter === 'yesterday') {
+ $today_end = $now->setTime(22, 0, 0);
+ if ($now > $today_end) {
+ $today_end = $today_end->modify('+1 day');
+ }
+ $end = $today_end->modify('-1 day');
+ $start = $end->modify('-1 day');
+ } elseif ($date_filter === 'this_month') {
+ $start = $now->modify('first day of this month')->setTime(0, 0, 0);
+ $end = $now->modify('last day of this month')->setTime(23, 59, 59);
+ } elseif ($date_filter === 'last_month') {
+ $last_month = $now->modify('first day of last month');
+ $start = $last_month->setTime(0, 0, 0);
+ $end = $last_month->modify('last day of this month')->setTime(23, 59, 59);
+ } elseif ($date_filter === 'custom' && $custom_start_date && $custom_end_date) {
+ $start = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $custom_start_date . ' 00:00:00', $timezone);
+ $end = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $custom_end_date . ' 23:59:59', $timezone);
+ if (!$start || !$end || $start > $end) {
+ return $range;
+ }
+ } else {
+ return $range;
+ }
+
+ $range['start_gmt'] = $start->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+ $range['end_gmt'] = $end->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+ return $range;
 }
 
 function aoam_render_recent_assignments_page_content($ajax_request = false) {
@@ -3590,6 +3645,13 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  if ($source_filter !== 'all' && $source_filter !== 'current' && !isset($remote_source_options[$source_filter])) {
  $source_filter = 'all';
  }
+ $allowed_date_filters = array('all', 'today', 'yesterday', 'this_month', 'last_month', 'custom');
+ $assignment_date_filter = isset($_GET['assignment_date_filter']) ? sanitize_key($_GET['assignment_date_filter']) : 'all';
+ if (!in_array($assignment_date_filter, $allowed_date_filters, true)) {
+ $assignment_date_filter = 'all';
+ }
+ $custom_start_date = isset($_GET['custom_start_date']) ? sanitize_text_field(wp_unslash($_GET['custom_start_date'])) : '';
+ $custom_end_date = isset($_GET['custom_end_date']) ? sanitize_text_field(wp_unslash($_GET['custom_end_date'])) : '';
  $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
  $order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
  
@@ -3662,6 +3724,13 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  if ($moderator_filter > 0) {
  $base_where[] = 'pm.meta_value = %s';
  $base_params[] = (string) $moderator_filter;
+ }
+ $selected_date_range = aoam_get_recent_assignments_date_range($assignment_date_filter, $custom_start_date, $custom_end_date);
+ if (!empty($selected_date_range['start_gmt']) && !empty($selected_date_range['end_gmt'])) {
+ $base_where[] = 'o.date_created_gmt >= %s';
+ $base_where[] = 'o.date_created_gmt <= %s';
+ $base_params[] = $selected_date_range['start_gmt'];
+ $base_params[] = $selected_date_range['end_gmt'];
  }
  if ($source_filter === 'current') {
  $base_where[] = "NOT EXISTS (
@@ -3881,6 +3950,9 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <?php if ($source_filter !== 'all'): ?>
  | Source: <strong><?php echo esc_html($source_filter === 'current' ? 'Current Site' : parse_url($remote_source_options[$source_filter] ?? '', PHP_URL_HOST)); ?></strong>
  <?php endif; ?>
+ <?php if ($assignment_date_filter !== 'all'): ?>
+ | Date: <strong><?php echo esc_html(ucwords(str_replace('_', ' ', $assignment_date_filter))); ?></strong>
+ <?php endif; ?>
  </div>
  <?php endif; ?>
  </div>
@@ -3931,6 +4003,28 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <?php endforeach; ?>
  </select>
  </div>
+
+ <div class="filter-group">
+ <label for="assignment_date_filter">Date</label>
+ <select name="assignment_date_filter" id="assignment_date_filter">
+ <option value="all" <?php selected($assignment_date_filter, 'all'); ?>>All Times</option>
+ <option value="today" <?php selected($assignment_date_filter, 'today'); ?>>Today</option>
+ <option value="yesterday" <?php selected($assignment_date_filter, 'yesterday'); ?>>Yesterday</option>
+ <option value="this_month" <?php selected($assignment_date_filter, 'this_month'); ?>>This Month</option>
+ <option value="last_month" <?php selected($assignment_date_filter, 'last_month'); ?>>Last Month</option>
+ <option value="custom" <?php selected($assignment_date_filter, 'custom'); ?>>Custom</option>
+ </select>
+ </div>
+
+ <div class="filter-group aoam-custom-date-field">
+ <label for="custom_start_date">Start Date</label>
+ <input type="date" name="custom_start_date" id="custom_start_date" value="<?php echo esc_attr($custom_start_date); ?>">
+ </div>
+
+ <div class="filter-group aoam-custom-date-field">
+ <label for="custom_end_date">End Date</label>
+ <input type="date" name="custom_end_date" id="custom_end_date" value="<?php echo esc_attr($custom_end_date); ?>">
+ </div>
   
  <div class="filter-group">
  <label for="status_filter">Order Status</label>
@@ -3964,6 +4058,9 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  'moderator_filter' => $moderator_filter,
  'source_filter' => $source_filter,
  'status_filter' => $status_filter,
+ 'assignment_date_filter' => $assignment_date_filter,
+ 'custom_start_date' => $custom_start_date,
+ 'custom_end_date' => $custom_end_date,
  'per_page' => $per_page,
  ), admin_url('admin.php'))); ?>" class="button aoam-reset-filters">Clear Search</a>
  </div>
@@ -4100,6 +4197,9 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  'status_filter' => $status_filter,
  'source_filter' => $source_filter,
  'order_search' => $order_search,
+ 'assignment_date_filter' => $assignment_date_filter,
+ 'custom_start_date' => $custom_start_date,
+ 'custom_end_date' => $custom_end_date,
  'per_page' => $per_page,
  ), admin_url('admin.php'));
  
@@ -4356,6 +4456,14 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  border-radius: 6px;
  }
  .aoam-filter-form .filter-group input[type="search"] {
+ width: 100%;
+ max-width: none;
+ min-height: 36px;
+ border: 1px solid #c3c4c7;
+ border-radius: 6px;
+ padding: 0 10px;
+ }
+ .aoam-filter-form .filter-group input[type="date"] {
  width: 100%;
  max-width: none;
  min-height: 36px;
