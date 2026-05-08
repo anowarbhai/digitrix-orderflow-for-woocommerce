@@ -3296,6 +3296,12 @@ function moderator_recent_assignments_page() {
  var modalOrderId = null;
  var recentSearchTimer = null;
 
+ function toggleRecentCustomDates($scope) {
+ var $root = $scope || $app;
+ var showCustom = $root.find('#assignment_date_filter').val() === 'custom';
+ $root.find('.aoam-custom-date-field').toggle(showCustom);
+ }
+
  function collectParamsFromUrl(url) {
  var target = new URL(url || window.location.href, window.location.href);
  return target.searchParams;
@@ -3386,6 +3392,7 @@ function moderator_recent_assignments_page() {
  }).done(function(response) {
  if (response && response.success && response.data && response.data.html) {
  $app.html(response.data.html);
+ toggleRecentCustomDates($app);
  if (pushUrl) {
  window.history.pushState({}, '', '?' + searchParams.toString());
  }
@@ -3411,6 +3418,7 @@ function moderator_recent_assignments_page() {
  $app.on('change', '.aoam-filter-form select', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
+ toggleRecentCustomDates($(this).closest('form'));
  loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
  });
 
@@ -4035,12 +4043,12 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </select>
  </div>
 
- <div class="filter-group aoam-custom-date-field">
+ <div class="filter-group aoam-custom-date-field" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
  <label for="custom_start_date">Start Date</label>
  <input type="date" name="custom_start_date" id="custom_start_date" value="<?php echo esc_attr($custom_start_date); ?>">
  </div>
 
- <div class="filter-group aoam-custom-date-field">
+ <div class="filter-group aoam-custom-date-field" style="<?php echo $assignment_date_filter === 'custom' ? '' : 'display:none;'; ?>">
  <label for="custom_end_date">End Date</label>
  <input type="date" name="custom_end_date" id="custom_end_date" value="<?php echo esc_attr($custom_end_date); ?>">
  </div>
