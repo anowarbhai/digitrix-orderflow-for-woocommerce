@@ -3294,6 +3294,7 @@ function moderator_recent_assignments_page() {
  var $app = $('#aoam-recent-assignments-app');
  var request = null;
  var modalOrderId = null;
+ var recentSearchTimer = null;
 
  function collectParamsFromUrl(url) {
  var target = new URL(url || window.location.href, window.location.href);
@@ -3425,6 +3426,21 @@ function moderator_recent_assignments_page() {
  $app.on('search', '.aoam-filter-form input[type="search"]', function(e) {
  e.preventDefault();
  loadRecentAssignments(collectParamsFromForm($(this).closest('form')), true);
+ });
+
+ $app.on('input', '.aoam-filter-form input[type="search"]', function() {
+ var $field = $(this);
+ clearTimeout(recentSearchTimer);
+ recentSearchTimer = setTimeout(function() {
+ loadRecentAssignments(collectParamsFromForm($field.closest('form')), true);
+ }, 450);
+ });
+
+ $app.on('click', '.aoam-clear-search', function(e) {
+ e.preventDefault();
+ var $form = $(this).closest('form');
+ $form.find('input[name="order_search"]').val('');
+ loadRecentAssignments(collectParamsFromForm($form), true);
  });
 
  $app.on('click', '.tablenav-pages a, .aoam-soft-button, .aoam-reset-filters', function(e) {
@@ -3971,8 +3987,11 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div class="filter-group aoam-search-field">
  <label for="order_search">Search Orders</label>
  <div class="aoam-search-control">
+ <span class="dashicons dashicons-search"></span>
  <input type="search" name="order_search" id="order_search" value="<?php echo esc_attr($order_search); ?>" placeholder="Order ID, customer name, phone">
- <button type="submit" class="button button-primary">Search</button>
+ <?php if ($order_search !== ''): ?>
+ <button type="button" class="aoam-clear-search" aria-label="Clear search">x</button>
+ <?php endif; ?>
  </div>
  </div>
  
@@ -4050,21 +4069,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <option value="100" <?php selected($per_page, 100); ?>>100</option>
  </select>
  </div>
- <?php if ($order_search !== ''): ?>
- <div class="filter-group aoam-search-clear">
- <label>&nbsp;</label>
- <a href="<?php echo esc_url(add_query_arg(array(
- 'page' => 'moderator-recent-assignments',
- 'moderator_filter' => $moderator_filter,
- 'source_filter' => $source_filter,
- 'status_filter' => $status_filter,
- 'assignment_date_filter' => $assignment_date_filter,
- 'custom_start_date' => $custom_start_date,
- 'custom_end_date' => $custom_end_date,
- 'per_page' => $per_page,
- ), admin_url('admin.php'))); ?>" class="button aoam-reset-filters">Clear Search</a>
- </div>
- <?php endif; ?>
  </form>
  </div>
  </div>
@@ -4476,15 +4480,45 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  .aoam-search-control {
  display: flex;
+ align-items: center;
+ background: #fff;
+ border: 1px solid #c3c4c7;
+ border-radius: 6px;
  gap: 8px;
+ min-height: 36px;
+ padding: 0 8px;
+ }
+ .aoam-search-control .dashicons {
+ color: #646970;
+ font-size: 18px;
+ height: 18px;
+ width: 18px;
  }
  .aoam-search-control input {
  flex: 1 1 auto;
+ border: 0 !important;
+ box-shadow: none !important;
+ min-height: 34px !important;
+ padding: 0 !important;
  }
- .aoam-search-control .button {
- min-height: 36px;
- display: inline-flex;
+ .aoam-clear-search {
  align-items: center;
+ background: #f0f0f1;
+ border: 0;
+ border-radius: 50%;
+ color: #50575e;
+ cursor: pointer;
+ display: inline-flex;
+ font-size: 14px;
+ height: 22px;
+ justify-content: center;
+ line-height: 1;
+ padding: 0;
+ width: 22px;
+ }
+ .aoam-clear-search:hover {
+ background: #dcdcde;
+ color: #1d2327;
  }
  .aoam-search-clear .button {
  min-height: 36px;
