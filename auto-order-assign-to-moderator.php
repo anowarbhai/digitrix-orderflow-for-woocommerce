@@ -3695,7 +3695,7 @@ function aoam_get_recent_assignments_date_range($date_filter, $custom_start_date
  return $range;
 }
 
-function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $orders_meta_table, $orders_meta_table_exists) {
+function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $orders_meta_table, $orders_meta_table_exists, $date_range = array()) {
  global $wpdb;
 
  $orders_table = $wpdb->prefix . 'wc_orders';
@@ -3709,6 +3709,46 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  $flow_where = array($base_where_sql, 'o.status = %s');
  $flow_params = $base_params;
  $flow_params[] = 'wc-' . $to_status;
+
+ if (!empty($date_range['start_gmt']) && !empty($date_range['end_gmt'])) {
+ $origin_meta_where = array(
+ "(EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} origin_pm
+ WHERE origin_pm.post_id = pm.post_id
+ AND origin_pm.meta_key = '_aoam_terminal_transition_from'
+ AND origin_pm.meta_value = %s
+ )
+ AND EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} transition_date_pm
+ WHERE transition_date_pm.post_id = pm.post_id
+ AND transition_date_pm.meta_key = '_aoam_terminal_transition_at_gmt'
+ AND transition_date_pm.meta_value >= %s
+ AND transition_date_pm.meta_value <= %s
+ ))"
+ );
+ $flow_params[] = $from_status;
+ $flow_params[] = $date_range['start_gmt'];
+ $flow_params[] = $date_range['end_gmt'];
+
+ if ($orders_meta_table_exists) {
+ $origin_meta_where[] = "(EXISTS (
+ SELECT 1 FROM {$orders_meta_table} origin_om
+ WHERE origin_om.order_id = pm.post_id
+ AND origin_om.meta_key = '_aoam_terminal_transition_from'
+ AND origin_om.meta_value = %s
+ )
+ AND EXISTS (
+ SELECT 1 FROM {$orders_meta_table} transition_date_om
+ WHERE transition_date_om.order_id = pm.post_id
+ AND transition_date_om.meta_key = '_aoam_terminal_transition_at_gmt'
+ AND transition_date_om.meta_value >= %s
+ AND transition_date_om.meta_value <= %s
+ ))";
+ $flow_params[] = $from_status;
+ $flow_params[] = $date_range['start_gmt'];
+ $flow_params[] = $date_range['end_gmt'];
+ }
+ } else {
  $origin_meta_where = array(
  "EXISTS (
  SELECT 1 FROM {$wpdb->postmeta} origin_pm
@@ -3727,6 +3767,7 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  AND origin_om.meta_value = %s
  )";
  $flow_params[] = $from_status;
+ }
  }
 
  $flow_where[] = '(' . implode(' OR ', $origin_meta_where) . ')';
@@ -3927,7 +3968,23 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $base_where[] = '(' . implode(' OR ', $search_where) . ')';
  }
 
+ $flow_base_where = $base_where;
+ $flow_base_params = $base_params;
+ if (!empty($selected_date_range['start_gmt']) && !empty($selected_date_range['end_gmt'])) {
+ $removed_date_clauses = 0;
+ foreach ($flow_base_where as $where_index => $where_clause) {
+ if ($removed_date_clauses < 2 && in_array($where_clause, array('o.date_created_gmt >= %s', 'o.date_created_gmt <= %s'), true)) {
+ unset($flow_base_where[$where_index]);
+ $removed_date_clauses++;
+ }
+ }
+ $flow_base_where = array_values($flow_base_where);
+ $date_param_offset = 2 + ($moderator_filter > 0 ? 1 : 0);
+ array_splice($flow_base_params, $date_param_offset, 2);
+ }
+
  $base_where_sql = implode(' AND ', $base_where);
+ $flow_base_where_sql = implode(' AND ', $flow_base_where);
  $status_rows = $wpdb->get_results($wpdb->prepare("
  SELECT o.status, COUNT(DISTINCT pm.post_id) AS total
  FROM {$wpdb->postmeta} pm
@@ -3959,7 +4016,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  INNER JOIN {$orders_table} o ON o.id = pm.post_id
  WHERE " . implode(' AND ', $today_where) . "
  ", $today_params));
- $flow_counts = aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $orders_meta_table, $orders_meta_table_exists);
+ $flow_counts = aoam_get_recent_assignment_flow_counts($flow_base_where_sql, $flow_base_params, $orders_meta_table, $orders_meta_table_exists, $selected_date_range);
  $processing_flow_total = array_sum($flow_counts['processing']);
  $partial_flow_total = array_sum($flow_counts['partial']);
  $flow_total = $processing_flow_total + $partial_flow_total;
