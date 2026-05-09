@@ -3963,7 +3963,12 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $processing_flow_total = array_sum($flow_counts['processing']);
  $partial_flow_total = array_sum($flow_counts['partial']);
  $flow_total = $processing_flow_total + $partial_flow_total;
+ $completed_flow_total = $flow_counts['processing']['completed'] + $flow_counts['partial']['completed'];
+ $cancelled_flow_total = $flow_counts['processing']['cancelled'] + $flow_counts['partial']['cancelled'];
  $flow_max_value = max(1, $flow_counts['processing']['completed'], $flow_counts['processing']['cancelled'], $flow_counts['partial']['completed'], $flow_counts['partial']['cancelled']);
+ $flow_percent = function($value, $total) {
+ return $total > 0 ? round(((int) $value / (int) $total) * 100) : 0;
+ };
 
  $query_where = $base_where;
  $query_params = $base_params;
@@ -4051,20 +4056,23 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div>
  <strong><?php echo esc_html(number_format_i18n($processing_flow_total)); ?></strong>
  <small>From Processing</small>
+ <em><?php echo esc_html($flow_percent($processing_flow_total, $flow_total)); ?>% of tracked</em>
  </div>
  </div>
  <div class="aoam-flow-card aoam-flow-completed">
  <span class="dashicons dashicons-yes-alt"></span>
  <div>
- <strong><?php echo esc_html(number_format_i18n($flow_counts['processing']['completed'] + $flow_counts['partial']['completed'])); ?></strong>
+ <strong><?php echo esc_html(number_format_i18n($completed_flow_total)); ?></strong>
  <small>Total Completed</small>
+ <em><?php echo esc_html($flow_percent($completed_flow_total, $flow_total)); ?>% of tracked</em>
  </div>
  </div>
  <div class="aoam-flow-card aoam-flow-cancelled">
  <span class="dashicons dashicons-dismiss"></span>
  <div>
- <strong><?php echo esc_html(number_format_i18n($flow_counts['processing']['cancelled'] + $flow_counts['partial']['cancelled'])); ?></strong>
+ <strong><?php echo esc_html(number_format_i18n($cancelled_flow_total)); ?></strong>
  <small>Total Cancelled</small>
+ <em><?php echo esc_html($flow_percent($cancelled_flow_total, $flow_total)); ?>% of tracked</em>
  </div>
  </div>
  <div class="aoam-flow-card aoam-flow-partial">
@@ -4072,24 +4080,26 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div>
  <strong><?php echo esc_html(number_format_i18n($partial_flow_total)); ?></strong>
  <small>From Partial</small>
+ <em><?php echo esc_html($flow_percent($partial_flow_total, $flow_total)); ?>% of tracked</em>
  </div>
  </div>
  </div>
  <div class="aoam-flow-bars">
  <?php
  $flow_bar_rows = array(
- array('label' => 'Processing to Completed', 'value' => $flow_counts['processing']['completed'], 'class' => 'completed'),
- array('label' => 'Processing to Cancelled', 'value' => $flow_counts['processing']['cancelled'], 'class' => 'cancelled'),
- array('label' => 'Partial to Completed', 'value' => $flow_counts['partial']['completed'], 'class' => 'completed'),
- array('label' => 'Partial to Cancelled', 'value' => $flow_counts['partial']['cancelled'], 'class' => 'cancelled'),
+ array('label' => 'Processing to Completed', 'value' => $flow_counts['processing']['completed'], 'total' => $processing_flow_total, 'class' => 'completed'),
+ array('label' => 'Processing to Cancelled', 'value' => $flow_counts['processing']['cancelled'], 'total' => $processing_flow_total, 'class' => 'cancelled'),
+ array('label' => 'Partial to Completed', 'value' => $flow_counts['partial']['completed'], 'total' => $partial_flow_total, 'class' => 'completed'),
+ array('label' => 'Partial to Cancelled', 'value' => $flow_counts['partial']['cancelled'], 'total' => $partial_flow_total, 'class' => 'cancelled'),
  );
  foreach ($flow_bar_rows as $flow_row):
  $bar_width = max(4, round(((int) $flow_row['value'] / $flow_max_value) * 100));
+ $row_percent = $flow_percent($flow_row['value'], $flow_row['total']);
  ?>
  <div class="aoam-flow-bar-row">
  <div class="aoam-flow-bar-meta">
  <span><?php echo esc_html($flow_row['label']); ?></span>
- <strong><?php echo esc_html(number_format_i18n($flow_row['value'])); ?></strong>
+ <strong><span><?php echo esc_html(number_format_i18n($flow_row['value'])); ?></span><em><?php echo esc_html($row_percent); ?>%</em></strong>
  </div>
  <div class="aoam-flow-bar-track">
  <div class="aoam-flow-bar-fill aoam-flow-bar-<?php echo esc_attr($flow_row['class']); ?>" style="width: <?php echo esc_attr($bar_width); ?>%;"></div>
@@ -4648,6 +4658,14 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  color: #646970;
  font-weight: 700;
  }
+ .aoam-flow-card em {
+ display: block;
+ margin-top: 5px;
+ color: #2271b1;
+ font-size: 12px;
+ font-style: normal;
+ font-weight: 700;
+ }
  .aoam-flow-processing .dashicons { background: #e7f3ff; color: #2271b1; }
  .aoam-flow-partial .dashicons { background: #f0f0f1; color: #50575e; }
  .aoam-flow-completed .dashicons { background: #e5f7e5; color: #1f8f3a; }
@@ -4667,8 +4685,17 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  font-weight: 700;
  }
  .aoam-flow-bar-meta strong {
+ display: inline-flex;
+ align-items: center;
+ gap: 8px;
  color: #1d2327;
  font-size: 16px;
+ }
+ .aoam-flow-bar-meta strong em {
+ color: #646970;
+ font-size: 12px;
+ font-style: normal;
+ font-weight: 700;
  }
  .aoam-flow-bar-track {
  height: 12px;
