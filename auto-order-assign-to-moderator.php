@@ -39,6 +39,23 @@ function aoam_woocommerce_missing_notice() {
  <?php
 }
 
+function aoam_load_admin_page_files() {
+ $page_files = array(
+ 'dashboard.php',
+ 'recent-assignments.php',
+ 'sequence-status.php',
+ 'product-assignments.php',
+ 'plugin-settings.php',
+ 'remote-import.php',
+ 'reassign-orders.php',
+ );
+
+ foreach ($page_files as $page_file) {
+ require_once AOAM_PLUGIN_DIR . 'includes/pages/' . $page_file;
+ }
+}
+aoam_load_admin_page_files();
+
 function aoam_is_plugin_admin_screen() {
  $screen = function_exists('get_current_screen') ? get_current_screen() : null;
  if (!$screen || empty($screen->id)) {
@@ -1785,7 +1802,7 @@ function aoam_get_admin_page_registry() {
  'menu_title' => 'Order Management',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-settings',
- 'callback' => 'moderator_settings_main_page',
+ 'callback' => 'aoam_dashboard_page',
  'icon' => 'dashicons-sort',
  'position' => 56,
  ),
@@ -1794,42 +1811,42 @@ function aoam_get_admin_page_registry() {
  'menu_title' => 'Recent Assignments',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-recent-assignments',
- 'callback' => 'moderator_recent_assignments_page',
+ 'callback' => 'aoam_recent_assignments_page',
  ),
  'sequence_status' => array(
  'page_title' => 'Moderator Sequence & Status',
  'menu_title' => 'Sequence & Status',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-sequence-status',
- 'callback' => 'moderator_sequence_status_page',
+ 'callback' => 'aoam_sequence_status_page',
  ),
  'product_assignments' => array(
  'page_title' => 'Assign Products to Moderators',
  'menu_title' => 'Product Assignments',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-product-assignments',
- 'callback' => 'moderator_product_assignments_page',
+ 'callback' => 'aoam_product_assignments_page',
  ),
  'plugin_settings' => array(
  'page_title' => 'Plugin Settings',
  'menu_title' => 'Plugin Settings',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-plugin-settings',
- 'callback' => 'aoam_plugin_settings_page',
+ 'callback' => 'aoam_settings_page',
  ),
  'remote_import' => array(
  'page_title' => 'Remote Order Import',
  'menu_title' => 'Remote Import',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-remote-import',
- 'callback' => 'aoam_remote_order_import_page',
+ 'callback' => 'aoam_remote_import_page',
  ),
  'reassign_orders' => array(
  'page_title' => 'Reassign Orders',
  'menu_title' => 'Reassign',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-reassign-orders',
- 'callback' => 'moderator_reassign_orders_page',
+ 'callback' => 'aoam_reassign_orders_page',
  ),
  );
 }

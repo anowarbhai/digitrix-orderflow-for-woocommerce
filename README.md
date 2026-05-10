@@ -56,13 +56,21 @@ auto-order-assign-to-moderator/
 │       ├── recent-assignments.js
 │       └── simple-orders.js
 └── includes/
+    ├── pages/
+    │   ├── dashboard.php
+    │   ├── plugin-settings.php
+    │   ├── product-assignments.php
+    │   ├── recent-assignments.php
+    │   ├── reassign-orders.php
+    │   ├── remote-import.php
+    │   └── sequence-status.php
     ├── class-admin-pages.php
     ├── class-moderator-interface.php
     ├── class-order-assignment.php
     └── functions.php
 ```
 
-The plugin currently keeps legacy page rendering in the main plugin file for compatibility. Shared and page-specific CSS/JS are loaded from `assets/` so future page extraction can be done safely without changing public behavior.
+Each admin menu page has its own entry file in `includes/pages/`. The plugin still keeps some legacy rendering code in the main plugin file for compatibility, while the page files act as stable controllers. Shared and page-specific CSS/JS are loaded from `assets/` so deeper template extraction can be done safely without changing public behavior.
 
 ## Remote Import Setup
 
