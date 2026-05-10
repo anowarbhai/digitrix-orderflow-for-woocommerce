@@ -4233,23 +4233,28 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </div>
  <div class="aoam-flow-bars">
  <?php
- $flow_bar_rows = array(
- array('label' => 'Processing to Completed', 'value' => $flow_counts['processing']['completed'], 'total' => $processing_flow_total, 'class' => 'completed'),
- array('label' => 'Processing to Cancelled', 'value' => $flow_counts['processing']['cancelled'], 'total' => $processing_flow_total, 'class' => 'cancelled'),
- array('label' => 'Partial to Completed', 'value' => $flow_counts['partial']['completed'], 'total' => $partial_flow_total, 'class' => 'completed'),
- array('label' => 'Partial to Cancelled', 'value' => $flow_counts['partial']['cancelled'], 'total' => $partial_flow_total, 'class' => 'cancelled'),
+ $flow_progress_rows = array(
+ array('label' => 'Processing', 'completed' => $flow_counts['processing']['completed'], 'cancelled' => $flow_counts['processing']['cancelled'], 'total' => $processing_flow_total),
+ array('label' => 'Partial', 'completed' => $flow_counts['partial']['completed'], 'cancelled' => $flow_counts['partial']['cancelled'], 'total' => $partial_flow_total),
  );
- foreach ($flow_bar_rows as $flow_row):
- $bar_width = max(4, round(((int) $flow_row['value'] / $flow_max_value) * 100));
- $row_percent = $flow_percent($flow_row['value'], $flow_row['total']);
+ foreach ($flow_progress_rows as $flow_row):
+ $completed_percent = $flow_percent($flow_row['completed'], $flow_row['total']);
+ $cancelled_percent = $flow_percent($flow_row['cancelled'], $flow_row['total']);
+ $completed_width = $flow_row['completed'] > 0 ? max(3, $completed_percent) : 0;
+ $cancelled_width = $flow_row['cancelled'] > 0 ? max(3, $cancelled_percent) : 0;
  ?>
- <div class="aoam-flow-bar-row">
- <div class="aoam-flow-bar-meta">
- <span><?php echo esc_html($flow_row['label']); ?></span>
- <strong><span><?php echo esc_html(number_format_i18n($flow_row['value'])); ?></span><em><?php echo esc_html($row_percent); ?>%</em></strong>
+ <div class="aoam-flow-progress-row">
+ <div class="aoam-flow-progress-head">
+ <strong><?php echo esc_html($flow_row['label']); ?> Flow</strong>
+ <span><?php echo esc_html(number_format_i18n($flow_row['total'])); ?> total</span>
  </div>
- <div class="aoam-flow-bar-track">
- <div class="aoam-flow-bar-fill aoam-flow-bar-<?php echo esc_attr($flow_row['class']); ?>" style="width: <?php echo esc_attr($bar_width); ?>%;"></div>
+ <div class="aoam-flow-progress-meta">
+ <span class="aoam-flow-complete-label"><?php echo esc_html($flow_row['label']); ?> to Completed: <strong><?php echo esc_html(number_format_i18n($flow_row['completed'])); ?></strong> <em><?php echo esc_html($completed_percent); ?>%</em></span>
+ <span class="aoam-flow-cancel-label"><?php echo esc_html($flow_row['label']); ?> to Cancelled: <strong><?php echo esc_html(number_format_i18n($flow_row['cancelled'])); ?></strong> <em><?php echo esc_html($cancelled_percent); ?>%</em></span>
+ </div>
+ <div class="aoam-flow-split-track">
+ <div class="aoam-flow-split-fill aoam-flow-split-completed" style="width: <?php echo esc_attr($completed_width); ?>%;"></div>
+ <div class="aoam-flow-split-fill aoam-flow-split-cancelled" style="width: <?php echo esc_attr($cancelled_width); ?>%;"></div>
  </div>
  </div>
  <?php endforeach; ?>
@@ -4819,44 +4824,76 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  .aoam-flow-cancelled .dashicons { background: #ffecec; color: #cc1818; }
  .aoam-flow-bars {
  display: grid;
- grid-template-columns: repeat(2, minmax(240px, 1fr));
- gap: 14px 18px;
+ grid-template-columns: 1fr;
+ gap: 18px;
  }
- .aoam-flow-bar-meta {
+ .aoam-flow-progress-row {
+ padding: 14px;
+ border: 1px solid #e1e8f0;
+ border-radius: 8px;
+ background: #fff;
+ }
+ .aoam-flow-progress-head,
+ .aoam-flow-progress-meta {
  display: flex;
  justify-content: space-between;
  align-items: center;
  gap: 10px;
- margin-bottom: 7px;
+ }
+ .aoam-flow-progress-head {
+ margin-bottom: 10px;
+ }
+ .aoam-flow-progress-head strong {
+ color: #1d2327;
+ font-size: 14px;
+ }
+ .aoam-flow-progress-head span {
  color: #50575e;
  font-weight: 700;
  }
- .aoam-flow-bar-meta strong {
+ .aoam-flow-progress-meta {
+ margin-bottom: 8px;
+ color: #50575e;
+ font-weight: 700;
+ }
+ .aoam-flow-progress-meta span {
  display: inline-flex;
  align-items: center;
- gap: 8px;
- color: #1d2327;
- font-size: 16px;
+ gap: 6px;
  }
- .aoam-flow-bar-meta strong em {
+ .aoam-flow-progress-meta strong {
+ color: #1d2327;
+ font-size: 15px;
+ }
+ .aoam-flow-progress-meta em {
  color: #646970;
  font-size: 12px;
  font-style: normal;
  font-weight: 700;
  }
- .aoam-flow-bar-track {
- height: 12px;
- overflow: hidden;
+ .aoam-flow-complete-label::before,
+ .aoam-flow-cancel-label::before {
+ content: "";
+ display: inline-block;
+ width: 9px;
+ height: 9px;
+ border-radius: 999px;
+ }
+ .aoam-flow-complete-label::before { background: #22c55e; }
+ .aoam-flow-cancel-label::before { background: #ef4444; }
+ .aoam-flow-split-track {
+ display: flex;
+ height: 14px;
  border-radius: 999px;
  background: #edf0f2;
+ overflow: hidden;
  }
- .aoam-flow-bar-fill {
+ .aoam-flow-split-fill {
  height: 100%;
- border-radius: inherit;
- min-width: 4px;
+ transition: width 180ms ease;
  }
- .aoam-flow-bar-completed { background: #22c55e; }
- .aoam-flow-bar-cancelled { background: #ef4444; }
+ .aoam-flow-split-completed { background: #22c55e; }
+ .aoam-flow-split-cancelled { background: #ef4444; margin-left: auto; }
  .aoam-status-grid {
  display: flex;
  flex-wrap: wrap;
@@ -5104,6 +5141,11 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  .aoam-flow-total {
  text-align: left;
+ }
+ .aoam-flow-progress-head,
+ .aoam-flow-progress-meta {
+ align-items: flex-start;
+ flex-direction: column;
  }
  }
  .modal-backdrop {
