@@ -1,70 +1,134 @@
-# Auto Order Assign To Moderator
+# WooCommerce Order Auto Assign To Moderator
 
-**Contributors:** Anowar Hossain  
-**Company:** Shirin Fashion  
-**Plugin URL:** https://shirinshoes.com/  
-**Requires at least:** WordPress 5.8  
-**Tested up to:** WordPress 6.3  
-**Requires PHP:** 7.4  
-**WC requires at least:** 6.0  
-**License:** GPL v2 or later  
-**License URI:** https://www.gnu.org/licenses/gpl-2.0.html
+Professional WooCommerce operations plugin for assigning orders to moderators, importing orders from remote WooCommerce stores, and giving moderators a focused order-processing interface.
 
-## Description
+## Plugin Metadata
 
-Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing. This plugin ensures fair distribution of orders among moderators while considering their product expertise.
+- **Plugin name:** WooCommerce Order Auto Assign To Moderator
+- **Text domain:** `auto-order-assign-moderator`
+- **Requires WordPress:** 5.8+
+- **Requires PHP:** 7.4+
+- **Requires WooCommerce:** 6.0+
+- **Current version:** 1.2.0
+- **License:** GPL v2 or later
 
-## Features
+## Core Features
 
-- **Product-Based Assignment**: Assign specific products to moderators
-- **Round-Robin Sequencing**: Fair distribution using sequence numbers
-- **Moderator Management**: Comprehensive admin interface for managing moderators
-- **Order Filtering**: Moderators only see orders assigned to them
-- **Real-time Assignment**: Automatic assignment when new orders are created
-- **Bulk Operations**: Manage multiple moderators and products efficiently
-- **Email Notifications**: Notify moderators when assigned new orders
+- Automatic order assignment by product, status, user sequence, and active shift.
+- Separate moderator order dashboard with mobile card view.
+- AJAX filters for moderator order lists and recent assignments.
+- Recent Assignments dashboard with search, source, status, date filters, and flow analytics.
+- Completion and cancellation flow chart for Processing/Partial orders.
+- Manual status and assigned moderator updates via modal/AJAX.
+- Remote WooCommerce REST API import from multiple source sites.
+- Remote order status sync back to source stores.
+- WP-Cron support with an admin fallback for remote imports.
+- Dhaka timezone display for operational order dates.
 
-## Installation
+## Admin Pages
 
-1. Upload the `auto-order-assign-to-moderator` folder to the `/wp-content/plugins/` directory
-2. Activate the plugin through the 'Plugins' menu in WordPress
-3. Ensure WooCommerce is installed and active
-4. Go to Moderator Settings in admin to configure
+| Page | Slug | Purpose |
+| --- | --- | --- |
+| Dashboard | `moderator-settings` | User counts, assignment overview, system summary |
+| Recent Assignments | `moderator-recent-assignments` | Assigned order table, filters, analytics, export tools |
+| Sequence & Status | `moderator-sequence-status` | Moderator sequence, active/inactive state, shift controls |
+| Product Assignments | `moderator-product-assignments` | Assign products to moderators |
+| Reassign | `moderator-reassign-orders` | Bulk reassignment from inactive users |
+| Plugin Settings | `moderator-plugin-settings` | Role and plugin behavior settings |
+| Remote Import | `moderator-remote-import` | Remote WooCommerce source configuration and manual import |
+| My Orders | `moderator-simple-orders` | Moderator-facing order list and mobile card workflow |
 
-## Usage
+## File Structure
 
-### For Administrators:
+```text
+auto-order-assign-to-moderator/
+├── auto-order-assign-to-moderator.php
+├── README.md
+├── uninstall.php
+├── assets/
+│   ├── css/
+│   │   ├── admin.css
+│   │   ├── recent-assignments.css
+│   │   └── simple-orders.css
+│   └── js/
+│       ├── admin-core.js
+│       ├── admin.js
+│       ├── recent-assignments.js
+│       └── simple-orders.js
+└── includes/
+    ├── class-admin-pages.php
+    ├── class-moderator-interface.php
+    ├── class-order-assignment.php
+    └── functions.php
+```
 
-1. **Setup Moderators**: Create users with 'moderator' role
-2. **Set Sequences**: Assign sequence numbers in Sequence & Status page
-3. **Assign Products**: Link products to moderators in Product Assignments
-4. **Monitor**: View assignments in Recent Assignments page
+The plugin currently keeps legacy page rendering in the main plugin file for compatibility. Shared and page-specific CSS/JS are loaded from `assets/` so future page extraction can be done safely without changing public behavior.
 
-### For Moderators:
+## Remote Import Setup
 
-1. **View Orders**: Access "My Orders" in admin menu
-2. **Process Orders**: See only orders assigned to you
-3. **Update Status**: Change order status as needed
+1. Go to **Order Management → Remote Import**.
+2. Enable remote import.
+3. Add each remote WooCommerce site URL.
+4. Add WooCommerce REST API consumer key and secret.
+5. Select statuses to import, such as `processing`, `partial`, or `pending`.
+6. Save settings.
+7. Use **Run Import Now** to test manually.
+8. Configure server cron for production.
 
-## Frequently Asked Questions
+Recommended server cron:
 
-### How are orders assigned?
+```bash
+*/5 * * * * cd /home/USERNAME/public_html && /usr/local/bin/php wp-cron.php >/dev/null 2>&1
+```
 
-Orders are assigned based on:
-1. Product specialization (moderators only get orders for their assigned products)
-2. Round-robin sequence (fair distribution among eligible moderators)
-3. Active status (only active moderators receive orders)
+If `wp-cron.php` over HTTPS returns `403 Forbidden`, use PHP CLI cron instead of `wget` or `curl`.
 
-### Can I manually assign orders?
+## Date Rules
 
-Yes, you can manually reassign orders from the order edit page in the "Assign Moderator" section.
+Recent Assignments date filters use the business-day rule requested for operations:
 
-### What happens if no moderators are assigned to a product?
+- **Today:** previous day 10:00 PM to current day 10:00 PM
+- **Yesterday:** previous business window
+- **This Month / Last Month:** calendar month in the WordPress timezone
+- **Custom:** selected start and end date
 
-The order will not be assigned to any moderator and an admin note will be added.
+Order display dates are formatted in `Asia/Dhaka`.
+
+## Deployment
+
+On the live server:
+
+```bash
+cd /path/to/wp-content/plugins/auto-order-assign-to-moderator
+git pull origin main
+```
+
+Then clear any page cache and refresh the WordPress admin page.
+
+## Development Notes
+
+- Keep business logic prefixed with `aoam_`.
+- Use WordPress/WooCommerce APIs where possible.
+- Keep remote API credentials in WordPress options only.
+- Run a syntax check before deploy:
+
+```bash
+php -l auto-order-assign-to-moderator.php
+```
 
 ## Changelog
 
-### 1.0.1
-* Initial release
-*
+### 1.2.0
+
+- Added centralized plugin constants and page-specific asset loading.
+- Added professional README and deployment guidance.
+- Added page-specific CSS/JS asset files for Recent Assignments and Simple Orders.
+- Added plugin action links and uninstall guard.
+
+### 1.1.x
+
+- Added remote WooCommerce REST API import and status sync.
+- Added AJAX Recent Assignments and Simple Orders workflows.
+- Added mobile card view for moderator orders.
+- Added completion/cancellation flow analytics.
+- Added Dhaka timezone display.

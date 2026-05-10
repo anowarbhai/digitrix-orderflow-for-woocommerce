@@ -1,0 +1,26 @@
+/* Moderator Simple Orders page polish */
+body.toplevel_page_moderator-simple-orders,
+body.admin_page_moderator-simple-orders {
+ background: #f3f6fa;
+}
+
+.mobile-order-card,
+.order-filters-container,
+.phone-search-card,
+.orders-summary-card {
+ box-sizing: border-box;
+}
+
+.mobile-order-card {
+ transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+}
+
+.mobile-order-card.is-updating {
+ opacity: 0.45;
+ transform: translateY(2px);
+}
+
+.mobile-status-form select:disabled {
+ cursor: wait;
+ opacity: 0.7;
+}

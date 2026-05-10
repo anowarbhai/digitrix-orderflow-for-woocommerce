@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce Order Auto Assign To Moderator
  * Plugin URI: https://shirinshoes.com/
  * Description: Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing.
- * Version: 1.1.3
+ * Version: 1.2.0
  * Author: Anowar Hossain
  * Author URI: https://shirinshoes.com/
  * Company: Shirin Fashion
@@ -11,12 +11,19 @@
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * WC requires at least: 6.0
+ * Requires Plugins: woocommerce
  */
 
 // Prevent direct access
 if (!defined('ABSPATH')) {
  exit;
 }
+
+define('AOAM_VERSION', '1.2.0');
+define('AOAM_PLUGIN_FILE', __FILE__);
+define('AOAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('AOAM_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('AOAM_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
 // Check if WooCommerce is active
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
@@ -30,6 +37,52 @@ function aoam_woocommerce_missing_notice() {
  <p><?php _e('WooCommerce Order Auto Assign To Moderator requires WooCommerce to be installed and active.', 'auto-order-assign-moderator'); ?></p>
  </div>
  <?php
+}
+
+function aoam_is_plugin_admin_screen() {
+ $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+ if (!$screen || empty($screen->id)) {
+ return false;
+ }
+
+ return strpos($screen->id, 'moderator') !== false || strpos($screen->id, 'order-management') !== false;
+}
+
+add_action('admin_enqueue_scripts', 'aoam_enqueue_admin_assets', 20);
+function aoam_enqueue_admin_assets() {
+ if (!aoam_is_plugin_admin_screen()) {
+ return;
+ }
+
+ $screen = get_current_screen();
+ wp_enqueue_style('dashicons');
+ wp_enqueue_style('aoam-admin', AOAM_PLUGIN_URL . 'assets/css/admin.css', array(), AOAM_VERSION);
+ wp_enqueue_script('jquery');
+
+ if (strpos($screen->id, 'moderator-recent-assignments') !== false) {
+ wp_enqueue_style('aoam-recent-assignments', AOAM_PLUGIN_URL . 'assets/css/recent-assignments.css', array('aoam-admin'), AOAM_VERSION);
+ wp_enqueue_script('aoam-recent-assignments', AOAM_PLUGIN_URL . 'assets/js/recent-assignments.js', array('jquery'), AOAM_VERSION, true);
+ }
+
+ if (strpos($screen->id, 'moderator-simple-orders') !== false) {
+ wp_enqueue_style('aoam-simple-orders', AOAM_PLUGIN_URL . 'assets/css/simple-orders.css', array('aoam-admin'), AOAM_VERSION);
+ wp_enqueue_script('aoam-simple-orders', AOAM_PLUGIN_URL . 'assets/js/simple-orders.js', array('jquery'), AOAM_VERSION, true);
+ }
+
+ wp_enqueue_script('aoam-admin-core', AOAM_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery'), AOAM_VERSION, true);
+ wp_localize_script('aoam-admin-core', 'aoamAdmin', array(
+ 'ajaxUrl' => admin_url('admin-ajax.php'),
+ 'version' => AOAM_VERSION,
+ 'screenId' => $screen->id,
+ ));
+}
+
+add_filter('plugin_action_links_' . AOAM_PLUGIN_BASENAME, 'aoam_plugin_action_links');
+function aoam_plugin_action_links($links) {
+ $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-settings')) . '">' . esc_html__('Dashboard', 'auto-order-assign-moderator') . '</a>';
+ $docs_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-plugin-settings')) . '">' . esc_html__('Settings', 'auto-order-assign-moderator') . '</a>';
+ array_unshift($links, $settings_link, $docs_link);
+ return $links;
 }
 
 
@@ -1725,68 +1778,88 @@ Date: " . aoam_format_order_local_date($order, 'F j, Y g:i A') . "
 // Admin menu for separate pages
 add_action('admin_menu', 'moderator_sequence_settings_menu');
 
+function aoam_get_admin_page_registry() {
+ return array(
+ 'dashboard' => array(
+ 'page_title' => 'Order Management',
+ 'menu_title' => 'Order Management',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-settings',
+ 'callback' => 'moderator_settings_main_page',
+ 'icon' => 'dashicons-sort',
+ 'position' => 56,
+ ),
+ 'recent_assignments' => array(
+ 'page_title' => 'Recent Assignments',
+ 'menu_title' => 'Recent Assignments',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-recent-assignments',
+ 'callback' => 'moderator_recent_assignments_page',
+ ),
+ 'sequence_status' => array(
+ 'page_title' => 'Moderator Sequence & Status',
+ 'menu_title' => 'Sequence & Status',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-sequence-status',
+ 'callback' => 'moderator_sequence_status_page',
+ ),
+ 'product_assignments' => array(
+ 'page_title' => 'Assign Products to Moderators',
+ 'menu_title' => 'Product Assignments',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-product-assignments',
+ 'callback' => 'moderator_product_assignments_page',
+ ),
+ 'plugin_settings' => array(
+ 'page_title' => 'Plugin Settings',
+ 'menu_title' => 'Plugin Settings',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-plugin-settings',
+ 'callback' => 'aoam_plugin_settings_page',
+ ),
+ 'remote_import' => array(
+ 'page_title' => 'Remote Order Import',
+ 'menu_title' => 'Remote Import',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-remote-import',
+ 'callback' => 'aoam_remote_order_import_page',
+ ),
+ 'reassign_orders' => array(
+ 'page_title' => 'Reassign Orders',
+ 'menu_title' => 'Reassign',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-reassign-orders',
+ 'callback' => 'moderator_reassign_orders_page',
+ ),
+ );
+}
+
 function moderator_sequence_settings_menu() {
+ $pages = aoam_get_admin_page_registry();
+ $dashboard = $pages['dashboard'];
  add_menu_page(
- 'Order Management',
- 'Order Management',
- 'manage_options',
- 'moderator-settings',
- 'moderator_settings_main_page',
- 'dashicons-sort',
- 56
- );
- 
- add_submenu_page(
- 'moderator-settings',
- 'Recent Assignments',
- 'Recent Assignments',
- 'manage_options',
- 'moderator-recent-assignments',
- 'moderator_recent_assignments_page'
- );
- 
- add_submenu_page(
- 'moderator-settings',
- 'Moderator Sequence & Status',
- 'Sequence & Status',
- 'manage_options',
- 'moderator-sequence-status',
- 'moderator_sequence_status_page'
- );
- 
- add_submenu_page(
- 'moderator-settings',
- 'Assign Products to Moderators',
- 'Product Assignments',
- 'manage_options',
- 'moderator-product-assignments',
- 'moderator_product_assignments_page'
+ $dashboard['page_title'],
+ $dashboard['menu_title'],
+ $dashboard['capability'],
+ $dashboard['menu_slug'],
+ $dashboard['callback'],
+ $dashboard['icon'],
+ $dashboard['position']
  );
 
+ foreach ($pages as $page_key => $page) {
+ if ($page_key === 'dashboard') {
+ continue;
+ }
  add_submenu_page(
- 'moderator-settings',
- 'Plugin Settings',
- 'Plugin Settings',
- 'manage_options',
- 'moderator-plugin-settings',
- 'aoam_plugin_settings_page'
+ $dashboard['menu_slug'],
+ $page['page_title'],
+ $page['menu_title'],
+ $page['capability'],
+ $page['menu_slug'],
+ $page['callback']
  );
- add_submenu_page(
- 'moderator-settings',
- 'Remote Order Import',
- 'Remote Import',
- 'manage_options',
- 'moderator-remote-import',
- 'aoam_remote_order_import_page'
- );
- add_submenu_page(
- 'moderator-settings',
- 'Reassign Orders',
- 'Reassign',
- 'manage_options',
- 'moderator-reassign-orders',
- 'moderator_reassign_orders_page'
- );
+ }
 }
 
 function moderator_settings_main_page() {

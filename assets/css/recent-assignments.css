@@ -1,0 +1,33 @@
+/* Recent Assignments page polish */
+.aoam-ajax-shell {
+ position: relative;
+}
+
+.aoam-ajax-shell.is-loading {
+ opacity: 0.72;
+ pointer-events: none;
+}
+
+.aoam-ajax-shell.is-loading::after {
+ content: "Loading...";
+ position: fixed;
+ right: 24px;
+ bottom: 24px;
+ z-index: 10000;
+ padding: 10px 14px;
+ border: 1px solid #c3d9ff;
+ border-radius: 6px;
+ background: #f0f6ff;
+ color: #1d2327;
+ font-weight: 700;
+ box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}
+
+.aoam-flow-panel,
+.aoam-report-panel {
+ box-sizing: border-box;
+}
+
+.aoam-flow-bar-fill {
+ transition: width 180ms ease;
+}

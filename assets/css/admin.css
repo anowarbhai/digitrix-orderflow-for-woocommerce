@@ -1,4 +1,79 @@
-/* Auto Order Assign Moderator Admin Styles */
+/* WooCommerce Order Auto Assign To Moderator Admin Styles */
+:root {
+    --aoam-primary: #2271b1;
+    --aoam-success: #1f8f3a;
+    --aoam-danger: #cc1818;
+    --aoam-warning: #996800;
+    --aoam-border: #dcdcde;
+    --aoam-muted: #646970;
+    --aoam-surface: #fff;
+    --aoam-soft: #f6f7f7;
+}
+
+.aoam-admin-page * {
+    box-sizing: border-box;
+}
+
+.aoam-admin-page .button,
+.aoam-admin-page select,
+.aoam-admin-page input {
+    border-radius: 6px;
+}
+
+.aoam-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 18px 0;
+}
+
+.aoam-page-header h1 {
+    margin: 0;
+}
+
+.aoam-page-description {
+    margin: 6px 0 0;
+    color: var(--aoam-muted);
+}
+
+.aoam-card,
+.aoam-panel {
+    border: 1px solid var(--aoam-border);
+    border-radius: 8px;
+    background: var(--aoam-surface);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.aoam-panel {
+    margin: 20px 0;
+    padding: 20px;
+}
+
+.aoam-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.aoam-grid-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aoam-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 782px) {
+    .aoam-page-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .aoam-grid-2,
+    .aoam-grid-3 {
+        grid-template-columns: 1fr;
+    }
+}
 .aoam-card { 
     margin: 20px 0; 
     padding: 20px; 
