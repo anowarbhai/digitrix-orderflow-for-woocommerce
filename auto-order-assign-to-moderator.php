@@ -3746,7 +3746,7 @@ function aoam_recent_assignments_ajax() {
 }
 
 function aoam_get_recent_assignments_date_range($date_filter, $custom_start_date = '', $custom_end_date = '') {
- $timezone = wp_timezone();
+ $timezone = function_exists('aoam_get_display_timezone') ? aoam_get_display_timezone() : new DateTimeZone('Asia/Dhaka');
  $now = new DateTimeImmutable('now', $timezone);
  $range = array('start_gmt' => '', 'end_gmt' => '');
 
@@ -3801,6 +3801,18 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  $flow_params[] = 'wc-' . $to_status;
 
  if (!empty($date_range['start_gmt']) && !empty($date_range['end_gmt'])) {
+ $no_transition_date_exists = "NOT EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} existing_transition_date_pm
+ WHERE existing_transition_date_pm.post_id = pm.post_id
+ AND existing_transition_date_pm.meta_key = '_aoam_terminal_transition_at_gmt'
+ )";
+ if ($orders_meta_table_exists) {
+ $no_transition_date_exists .= " AND NOT EXISTS (
+ SELECT 1 FROM {$orders_meta_table} existing_transition_date_om
+ WHERE existing_transition_date_om.order_id = pm.post_id
+ AND existing_transition_date_om.meta_key = '_aoam_terminal_transition_at_gmt'
+ )";
+ }
  $origin_meta_where = array(
  "(EXISTS (
  SELECT 1 FROM {$wpdb->postmeta} origin_pm
@@ -3814,8 +3826,20 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  AND transition_date_pm.meta_key = '_aoam_terminal_transition_at_gmt'
  AND transition_date_pm.meta_value >= %s
  AND transition_date_pm.meta_value <= %s
- ))"
+ ))",
+ "(EXISTS (
+ SELECT 1 FROM {$wpdb->postmeta} legacy_origin_pm
+ WHERE legacy_origin_pm.post_id = pm.post_id
+ AND legacy_origin_pm.meta_key = '_sequence_type'
+ AND legacy_origin_pm.meta_value = %s
+ )
+ AND {$no_transition_date_exists}
+ AND o.date_updated_gmt >= %s
+ AND o.date_updated_gmt <= %s)"
  );
+ $flow_params[] = $from_status;
+ $flow_params[] = $date_range['start_gmt'];
+ $flow_params[] = $date_range['end_gmt'];
  $flow_params[] = $from_status;
  $flow_params[] = $date_range['start_gmt'];
  $flow_params[] = $date_range['end_gmt'];
@@ -3834,6 +3858,18 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  AND transition_date_om.meta_value >= %s
  AND transition_date_om.meta_value <= %s
  ))";
+ $flow_params[] = $from_status;
+ $flow_params[] = $date_range['start_gmt'];
+ $flow_params[] = $date_range['end_gmt'];
+ $origin_meta_where[] = "(EXISTS (
+ SELECT 1 FROM {$orders_meta_table} legacy_origin_om
+ WHERE legacy_origin_om.order_id = pm.post_id
+ AND legacy_origin_om.meta_key = '_sequence_type'
+ AND legacy_origin_om.meta_value = %s
+ )
+ AND {$no_transition_date_exists}
+ AND o.date_updated_gmt >= %s
+ AND o.date_updated_gmt <= %s)";
  $flow_params[] = $from_status;
  $flow_params[] = $date_range['start_gmt'];
  $flow_params[] = $date_range['end_gmt'];
@@ -3918,10 +3954,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  'orderby' => 'display_name'
  ));
 
- // ADD: Get today's date for filtering
- $today_date = current_time('Y-m-d');
- $today_start = $today_date . ' 00:00:00';
- $today_end = $today_date . ' 23:59:59';
+ $today_date_range = aoam_get_recent_assignments_date_range('today');
 
  ?>
  <?php if (!$ajax_request): ?>
@@ -4099,7 +4132,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $today_where = $base_where;
  $today_where[] = 'o.date_created_gmt >= %s';
  $today_where[] = 'o.date_created_gmt <= %s';
- $today_params = array_merge($base_params, array(get_gmt_from_date($today_start), get_gmt_from_date($today_end)));
+ $today_params = array_merge($base_params, array($today_date_range['start_gmt'], $today_date_range['end_gmt']));
  $today_orders_count = (int) $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(DISTINCT pm.post_id)
  FROM {$wpdb->postmeta} pm
