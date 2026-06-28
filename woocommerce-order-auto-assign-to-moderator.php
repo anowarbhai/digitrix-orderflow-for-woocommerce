@@ -147,27 +147,31 @@ function aoam_update_shift_settings($shifts) {
 
 // Plugin Settings Page with Shift Settings
 function aoam_plugin_settings_page() {
+ if (!current_user_can('manage_options')) {
+ wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ }
+ 
  // Handle form submissions
  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
- if (isset($_POST['update_aoam_settings']) && wp_verify_nonce($_POST['aoam_settings_nonce'], 'aoam_settings')) {
+ if (isset($_POST['update_aoam_settings'], $_POST['aoam_settings_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['aoam_settings_nonce'])), 'aoam_settings')) {
  // Update assigned roles
- $selected_roles = isset($_POST['assigned_roles']) ? array_map('sanitize_text_field', $_POST['assigned_roles']) : array();
+ $selected_roles = isset($_POST['assigned_roles']) ? array_map('sanitize_text_field', wp_unslash((array) $_POST['assigned_roles'])) : array();
  update_option('aoam_assigned_roles', $selected_roles);
  
  echo '<div class="notice notice-success"><p>Settings updated successfully!</p></div>';
  }
  
  // Handle shift settings update
- if (isset($_POST['update_shift_settings']) && wp_verify_nonce($_POST['shift_settings_nonce'], 'shift_settings')) {
+ if (isset($_POST['update_shift_settings'], $_POST['shift_settings_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['shift_settings_nonce'])), 'shift_settings')) {
  $shift_settings = array();
  
  for ($i = 1; $i <= 3; $i++) {
  $shift_key = 'shift_' . $i;
  $shift_settings[$shift_key] = array(
- 'name' => sanitize_text_field($_POST['shift_name_' . $i]),
- 'start' => sanitize_text_field($_POST['shift_start_' . $i]),
- 'end' => sanitize_text_field($_POST['shift_end_' . $i]),
- 'color' => sanitize_text_field($_POST['shift_color_' . $i])
+ 'name' => isset($_POST['shift_name_' . $i]) ? sanitize_text_field(wp_unslash($_POST['shift_name_' . $i])) : '',
+ 'start' => isset($_POST['shift_start_' . $i]) ? sanitize_text_field(wp_unslash($_POST['shift_start_' . $i])) : '',
+ 'end' => isset($_POST['shift_end_' . $i]) ? sanitize_text_field(wp_unslash($_POST['shift_end_' . $i])) : '',
+ 'color' => isset($_POST['shift_color_' . $i]) ? sanitize_hex_color(wp_unslash($_POST['shift_color_' . $i])) : '#0073aa'
  );
  }
  
@@ -1290,7 +1294,7 @@ function schedule_order_assignment($order_id, $order) {
 // SHIFT TIME CHECK FUNCTIONS
 // ====================================================
 
-// Check if user is in any of their assigned shifts - FIXED VERSION
+// Check if user is in any of their assigned shifts.
 function is_user_in_any_shift($user_id) {
  $status = get_user_meta($user_id, 'moderator_status', true);
  
@@ -2346,10 +2350,14 @@ function moderator_settings_main_page() {
 }
 
  // ====================================================
- // MODIFIED SEQUENCE & STATUS PAGE WITH SHIFT ASSIGNMENT
+ // Sequence & Status page with shift assignment.
  // ====================================================
 
 function moderator_sequence_status_page() {
+ if (!current_user_can('manage_options')) {
+ wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ }
+ 
  // Get assigned roles dynamically
  $assigned_roles = aoam_get_assigned_roles();
  
@@ -2357,9 +2365,9 @@ function moderator_sequence_status_page() {
  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  
  // Handle status update
- if (isset($_POST['update_status']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['update_status'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
  if (isset($_POST['moderator_status'])) {
- foreach ($_POST['moderator_status'] as $user_id => $status) {
+ foreach (wp_unslash((array) $_POST['moderator_status']) as $user_id => $status) {
  $user_id = intval($user_id);
  $status = sanitize_text_field($status);
  update_user_meta($user_id, 'moderator_status', $status);
@@ -2373,9 +2381,9 @@ function moderator_sequence_status_page() {
  }
  
  // Handle sequence update
- if (isset($_POST['update_sequence']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['update_sequence'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
  if (isset($_POST['moderator_sequence'])) {
- foreach ($_POST['moderator_sequence'] as $user_id => $sequence) {
+ foreach (wp_unslash((array) $_POST['moderator_sequence']) as $user_id => $sequence) {
  $user_id = intval($user_id);
  $sequence = intval($sequence);
  update_user_meta($user_id, 'moderator_sequence', $sequence);
@@ -2386,9 +2394,9 @@ function moderator_sequence_status_page() {
  }
  
  // Handle shift assignment update
- if (isset($_POST['update_shifts']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['update_shifts'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
  if (isset($_POST['moderator_shifts'])) {
- foreach ($_POST['moderator_shifts'] as $user_id => $shifts) {
+ foreach (wp_unslash((array) $_POST['moderator_shifts']) as $user_id => $shifts) {
  $user_id = intval($user_id);
  $shifts = is_array($shifts) ? array_map('sanitize_text_field', $shifts) : array();
  update_user_meta($user_id, 'moderator_assigned_shifts', $shifts);
@@ -2398,8 +2406,8 @@ function moderator_sequence_status_page() {
  }
  
  // Handle shift removal for specific user
- if (isset($_POST['clear_user_shifts']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
- $user_id = intval($_POST['user_id']);
+ if (isset($_POST['clear_user_shifts'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
+ $user_id = isset($_POST['user_id']) ? absint($_POST['user_id']) : 0;
  if ($user_id) {
  delete_user_meta($user_id, 'moderator_assigned_shifts');
  echo '<div class="notice notice-success"><p>Shift assignments cleared for user!</p></div>';
@@ -2407,8 +2415,8 @@ function moderator_sequence_status_page() {
  }
  
  // Handle bulk actions
- if (isset($_POST['bulk_update']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
- $bulk_action = $_POST['bulk_action'] ?? '';
+ if (isset($_POST['bulk_update'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
+ $bulk_action = isset($_POST['bulk_action']) ? sanitize_key(wp_unslash($_POST['bulk_action'])) : '';
  
  // Get users with assigned roles
  $users = get_users(array('role__in' => $assigned_roles));
@@ -2439,10 +2447,10 @@ function moderator_sequence_status_page() {
  }
  
  // Get filter parameters
- $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
- $status_filter = isset($_GET['status_filter']) ? sanitize_text_field($_GET['status_filter']) : 'all';
- $sequence_filter = isset($_GET['sequence_filter']) ? sanitize_text_field($_GET['sequence_filter']) : 'all';
- $shift_filter = isset($_GET['shift_filter']) ? sanitize_text_field($_GET['shift_filter']) : 'all';
+ $search_term = isset($_GET['search']) ? sanitize_text_field(wp_unslash($_GET['search'])) : '';
+ $status_filter = isset($_GET['status_filter']) ? sanitize_key(wp_unslash($_GET['status_filter'])) : 'all';
+ $sequence_filter = isset($_GET['sequence_filter']) ? sanitize_key(wp_unslash($_GET['sequence_filter'])) : 'all';
+ $shift_filter = isset($_GET['shift_filter']) ? sanitize_key(wp_unslash($_GET['shift_filter'])) : 'all';
  
  // Get shift settings
  $shift_settings = aoam_get_shift_settings();
@@ -3097,9 +3105,11 @@ function moderator_sequence_status_page() {
 
 // The remaining functions (moderator_product_assignments_page, moderator_recent_assignments_page, etc.)
 // remain mostly the same as your original code, with minor adjustments for shift timing display
-// I'll include the most important ones below:
-
 function moderator_product_assignments_page() {
+ if (!current_user_can('manage_options')) {
+ wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ }
+ 
  // Get assigned roles dynamically
  $assigned_roles = aoam_get_assigned_roles();
  
@@ -3107,7 +3117,7 @@ function moderator_product_assignments_page() {
  if ($_SERVER['REQUEST_METHOD'] === 'POST') {
  
  // Handle product assignment update
- if (isset($_POST['update_products']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['update_products'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
  $updated_count = 0;
  
  // Get all users with assigned roles
@@ -3140,7 +3150,7 @@ function moderator_product_assignments_page() {
  }
  
  // Handle bulk actions for product assignments
- if (isset($_POST['bulk_product_action']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
+ if (isset($_POST['bulk_product_action'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
  $bulk_action = isset($_POST['bulk_product_action']) ? sanitize_key(wp_unslash($_POST['bulk_product_action'])) : '';
  $raw_user_ids = isset($_POST['user_ids']) ? wp_unslash($_POST['user_ids']) : array();
  if (is_string($raw_user_ids)) {
@@ -3169,10 +3179,10 @@ function moderator_product_assignments_page() {
  }
  
  // Get filter parameters
- $search_term = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
- $status_filter = isset($_GET['status_filter']) ? sanitize_text_field($_GET['status_filter']) : 'all';
- $assignment_filter = isset($_GET['assignment_filter']) ? sanitize_text_field($_GET['assignment_filter']) : 'all';
- $shift_filter = isset($_GET['shift_filter']) ? sanitize_text_field($_GET['shift_filter']) : 'all';
+ $search_term = isset($_GET['search']) ? sanitize_text_field(wp_unslash($_GET['search'])) : '';
+ $status_filter = isset($_GET['status_filter']) ? sanitize_key(wp_unslash($_GET['status_filter'])) : 'all';
+ $assignment_filter = isset($_GET['assignment_filter']) ? sanitize_key(wp_unslash($_GET['assignment_filter'])) : 'all';
+ $shift_filter = isset($_GET['shift_filter']) ? sanitize_key(wp_unslash($_GET['shift_filter'])) : 'all';
  
  // Base query for users with assigned roles
  $user_args = array(
@@ -4518,15 +4528,15 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
  $order_search = isset($_GET['order_search']) ? sanitize_text_field(wp_unslash($_GET['order_search'])) : '';
  
- // CHANGED: Get per_page from GET parameter
+ // Get per_page from GET parameter.
  $per_page = isset($_GET['per_page']) ? absint($_GET['per_page']) : 20;
  if (!in_array($per_page, array(10, 20, 50, 100), true)) {
  $per_page = 20;
  }
  
- // CHANGED: Get users with assigned roles
+ // Get users with assigned roles.
  $moderators = get_users(array(
- 'role__in' => $assigned_roles, // CHANGED: 'role' => 'moderator'
+ 'role__in' => $assigned_roles,
  'orderby' => 'display_name'
  ));
 
@@ -4903,7 +4913,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <strong>Currently viewing orders for:</strong> 
  <?php echo esc_html($moderator_name); ?>
  <?php if ($moderator_sequence): ?>
- (User <?php echo $moderator_sequence; ?>) <!-- CHANGED: Moderator -> User -->
+ (User <?php echo $moderator_sequence; ?>)
  <?php endif; ?>
  <?php if ($status_filter !== 'all'): ?>
  | Status: <strong><?php echo esc_html(ucfirst($status_filter)); ?></strong>
@@ -4943,7 +4953,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <div class="filter-group">
  <label for="moderator_filter">Filter by User</label> 
  <select name="moderator_filter" id="moderator_filter">
- <option value="0">All Users</option> <!-- CHANGED: Moderators -> Users -->
+ <option value="0">All Users</option>
  <?php foreach ($moderators as $mod): 
  $mod_sequence = get_user_meta($mod->ID, 'moderator_sequence', true);
  $display_name = $mod->display_name . ($mod_sequence ? ' (User ' . $mod_sequence . ')' : ''); 
@@ -5032,7 +5042,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <th style="width: 150px;">Customer</th>
  <th style="width: 200px;">Products</th>
  <th style="width: 100px;">Total</th>
- <th style="width: 150px;">Assigned User</th> <!-- CHANGED: Moderator -> User -->
+ <th style="width: 150px;">Assigned User</th>
  <th style="width: 80px;">Sequence</th>
  <th style="width: 100px;">Status</th>
  <th style="width: 120px;">Actions</th>
@@ -6272,10 +6282,16 @@ function simple_moderator_orders_page() {
 add_action('wp_ajax_aoam_simple_orders_ajax', 'aoam_simple_orders_ajax');
 function aoam_simple_orders_ajax() {
  check_ajax_referer('aoam_simple_orders_ajax', 'nonce');
+ $current_user = wp_get_current_user();
+ $assigned_roles = aoam_get_assigned_roles();
+ if (!$current_user || empty(array_intersect((array) $current_user->roles, $assigned_roles))) {
+ wp_send_json_error(array('message' => 'Permission denied'), 403);
+ }
+ 
  $_GET['page'] = 'moderator-simple-orders';
- $_GET['status'] = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : 'all';
- $_GET['date_filter'] = isset($_POST['date_filter']) ? sanitize_text_field($_POST['date_filter']) : 'all';
- $_GET['phone_search'] = isset($_POST['phone_search']) ? sanitize_text_field($_POST['phone_search']) : '';
+ $_GET['status'] = isset($_POST['status']) ? sanitize_key(wp_unslash($_POST['status'])) : 'all';
+ $_GET['date_filter'] = isset($_POST['date_filter']) ? sanitize_key(wp_unslash($_POST['date_filter'])) : 'all';
+ $_GET['phone_search'] = isset($_POST['phone_search']) ? sanitize_text_field(wp_unslash($_POST['phone_search'])) : '';
  $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
 
  ob_start();
@@ -6287,7 +6303,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  $current_user = wp_get_current_user();
  $user_id = $current_user->ID;
  
- // CHANGED: Check if user has any assigned role
+ // Check if user has any assigned role.
  $assigned_roles = aoam_get_assigned_roles();
  $user_has_role = !empty(array_intersect($current_user->roles, $assigned_roles));
  
@@ -6296,9 +6312,9 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  }
  
  // Handle order status update
- if (isset($_POST['update_order_status']) && wp_verify_nonce($_POST['moderator_nonce'], 'update_order_status')) {
- $order_id = intval($_POST['order_id']);
- $new_status = sanitize_text_field($_POST['order_status']);
+ if (isset($_POST['update_order_status'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'update_order_status')) {
+ $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+ $new_status = isset($_POST['order_status']) ? sanitize_key(wp_unslash($_POST['order_status'])) : '';
  
  if ($order_id && $new_status) {
  $order = wc_get_order($order_id);
@@ -6336,10 +6352,10 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  }
  
  // Get filters from URL
- $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : 'all';
- $date_filter = isset($_GET['date_filter']) ? sanitize_text_field($_GET['date_filter']) : 'all';
- $phone_search = isset($_GET['phone_search']) ? sanitize_text_field($_GET['phone_search']) : '';
- $paged = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+ $status_filter = isset($_GET['status']) ? sanitize_key(wp_unslash($_GET['status'])) : 'all';
+ $date_filter = isset($_GET['date_filter']) ? sanitize_key(wp_unslash($_GET['date_filter'])) : 'all';
+ $phone_search = isset($_GET['phone_search']) ? sanitize_text_field(wp_unslash($_GET['phone_search'])) : '';
+ $paged = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
  $per_page = 50;
  
  ?>
@@ -7692,12 +7708,12 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <?php
 }
 
-// FIXED VERSION - Handle AJAX order details with proper variable names
+// Handle AJAX order details.
 add_action('wp_ajax_get_moderator_order_details_simple', 'get_moderator_order_details_simple_fixed');
 
 function get_moderator_order_details_simple_fixed() {
  // Check nonce first
- if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'moderator_order_details')) {
+ if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'moderator_order_details')) {
  wp_send_json_error('Security verification failed');
  return;
  }
@@ -7708,7 +7724,7 @@ function get_moderator_order_details_simple_fixed() {
  return;
  }
  
- $order_id = intval($_POST['order_id']);
+ $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
  $current_user = wp_get_current_user();
  
  // Get the order
@@ -8217,7 +8233,7 @@ add_action('wp_ajax_update_order_status_ajax', 'handle_update_order_status_ajax'
 
 function handle_update_order_status_ajax() {
  // Check nonce
- if (!isset($_POST['status_update_nonce']) || !wp_verify_nonce($_POST['status_update_nonce'], 'update_order_status')) {
+ if (!isset($_POST['status_update_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['status_update_nonce'])), 'update_order_status')) {
  wp_send_json_error('Security verification failed');
  return;
  }
@@ -8233,8 +8249,8 @@ function handle_update_order_status_ajax() {
  return;
  }
  
- $order_id = intval($_POST['order_id']);
- $new_status = sanitize_text_field($_POST['order_status']);
+ $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+ $new_status = isset($_POST['order_status']) ? sanitize_key(wp_unslash($_POST['order_status'])) : '';
  $current_user = wp_get_current_user();
  
  // Get the order
@@ -8294,7 +8310,7 @@ add_action('wp_ajax_change_order_moderator_ajax', 'handle_change_order_moderator
 
 function handle_change_order_moderator_ajax() {
  // Check nonce
- if (!isset($_POST['moderator_change_nonce']) || !wp_verify_nonce($_POST['moderator_change_nonce'], 'change_order_moderator')) {
+ if (!isset($_POST['moderator_change_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_change_nonce'])), 'change_order_moderator')) {
  wp_send_json_error('Security check failed');
  }
  
@@ -8312,8 +8328,8 @@ function handle_change_order_moderator_ajax() {
  wp_send_json_error('Please select a moderator');
  }
  
- $order_id = intval($_POST['order_id']);
- $new_moderator_id = intval($_POST['new_moderator_id']);
+ $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+ $new_moderator_id = isset($_POST['new_moderator_id']) ? absint($_POST['new_moderator_id']) : 0;
  
  // Get order and moderator
  $order = wc_get_order($order_id);
@@ -8493,7 +8509,7 @@ function add_moderator_section_after_order_details($order) {
  add_action('wp_ajax_update_order_moderator_direct', 'handle_update_order_moderator_direct');
  
  function handle_update_order_moderator_direct() {
- if (!wp_verify_nonce($_POST['nonce'], 'direct_update_moderator')) {
+ if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'direct_update_moderator')) {
  wp_send_json_error('Security check failed');
  }
  
@@ -8501,8 +8517,8 @@ function add_moderator_section_after_order_details($order) {
  wp_send_json_error('Insufficient permissions');
  }
  
- $order_id = intval($_POST['order_id']);
- $moderator_id = intval($_POST['moderator_id']);
+ $order_id = isset($_POST['order_id']) ? absint($_POST['order_id']) : 0;
+ $moderator_id = isset($_POST['moderator_id']) ? absint($_POST['moderator_id']) : 0;
  
  $order = wc_get_order($order_id);
  $moderator = get_userdata($moderator_id);
@@ -9097,9 +9113,11 @@ function moderator_welcome_panel() {
  }
 }
 
-// Now the COMPLETE working solution:
-
 function moderator_reassign_orders_page() {
+ if (!current_user_can('manage_options')) {
+ wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ }
+ 
  // Get assigned roles
  $assigned_roles = aoam_get_assigned_roles();
  
@@ -9836,22 +9854,26 @@ function get_status_color_simple($status) {
 add_action('wp_ajax_get_reassign_preview_final', 'get_reassign_preview_final_ajax');
 
 function get_reassign_preview_final_ajax() {
- if (!wp_verify_nonce($_POST['nonce'], 'reassign_preview_final')) {
+ if (!current_user_can('manage_options')) {
+ wp_send_json_error('Permission denied');
+ }
+ 
+ if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'reassign_preview_final')) {
  wp_send_json_error('Security check failed');
  }
  
  $source_users = array();
  if (isset($_POST['source_users'])) {
- $source_users = array_map('intval', (array) $_POST['source_users']);
+ $source_users = array_map('intval', (array) wp_unslash($_POST['source_users']));
  } elseif (isset($_POST['inactive_user'])) {
- $source_users = array(intval($_POST['inactive_user']));
+ $source_users = array(absint($_POST['inactive_user']));
  }
  $source_users = array_values(array_filter(array_unique($source_users)));
- $active_users = isset($_POST['active_users']) ? array_map('intval', $_POST['active_users']) : array();
+ $active_users = isset($_POST['active_users']) ? array_map('intval', (array) wp_unslash($_POST['active_users'])) : array();
  $active_users = array_values(array_filter(array_unique($active_users), function($user_id) {
  return get_user_meta($user_id, 'moderator_status', true) !== 'inactive';
  }));
- $order_statuses = isset($_POST['order_statuses']) ? array_map('sanitize_text_field', $_POST['order_statuses']) : array();
+ $order_statuses = isset($_POST['order_statuses']) ? array_map('sanitize_key', (array) wp_unslash($_POST['order_statuses'])) : array();
  
  if (empty($source_users) || empty($active_users) || empty($order_statuses)) {
  wp_send_json_error('Please select source users, active target users, and order statuses.');
@@ -10012,8 +10034,15 @@ function get_orders_for_reassignment_final($user_ids, $statuses) {
 
 // Form submission handler
 function process_reassignment_form() {
+ if (!current_user_can('manage_options')) {
+ return array(
+ 'success' => false,
+ 'message' => 'You do not have permission to perform this action.'
+ );
+ }
+ 
  // Verify nonce
- if (!isset($_POST['reassign_nonce_main']) || !wp_verify_nonce($_POST['reassign_nonce_main'], 'reassign_orders_main')) {
+ if (!isset($_POST['reassign_nonce_main']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['reassign_nonce_main'])), 'reassign_orders_main')) {
  return array(
  'success' => false,
  'message' => 'Security check failed. Please try again.'
@@ -10028,7 +10057,7 @@ function process_reassignment_form() {
  );
  }
  
- $data = json_decode(stripslashes($_POST['inactive_user_data']), true);
+ $data = json_decode(wp_unslash($_POST['inactive_user_data']), true);
  
  if (!$data) {
  return array(
@@ -10044,7 +10073,7 @@ function process_reassignment_form() {
  }
  $source_users = array_values(array_filter(array_unique($source_users)));
  $active_users = isset($data['users']) ? array_map('intval', $data['users']) : array();
- $order_statuses = isset($data['statuses']) ? array_map('sanitize_text_field', $data['statuses']) : array();
+ $order_statuses = isset($data['statuses']) ? array_map('sanitize_key', $data['statuses']) : array();
  
  // Validation
  if (empty($source_users)) {
