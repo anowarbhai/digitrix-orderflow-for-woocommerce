@@ -3214,9 +3214,10 @@ function moderator_product_assignments_page() {
  <?php endforeach; ?>
  </select>
  <div class="aoam-product-options" role="listbox" aria-label="Assigned products">
+ <div class="aoam-product-match-count"></div>
  <?php foreach ($products as $product): ?>
  <?php $is_selected_product = in_array($product->get_id(), $assigned_products, true); ?>
- <button type="button" class="aoam-product-option <?php echo $is_selected_product ? 'is-selected' : ''; ?>" data-product-id="<?php echo esc_attr($product->get_id()); ?>" aria-selected="<?php echo $is_selected_product ? 'true' : 'false'; ?>">
+ <button type="button" class="aoam-product-option <?php echo $is_selected_product ? 'is-selected' : ''; ?>" data-product-id="<?php echo esc_attr($product->get_id()); ?>" data-product-name="<?php echo esc_attr(strtolower($product->get_name())); ?>" data-product-search="<?php echo esc_attr(strtolower($product->get_name() . ' ' . $product->get_id())); ?>" aria-selected="<?php echo $is_selected_product ? 'true' : 'false'; ?>">
  <span><?php echo esc_html($product->get_name()); ?> (ID: <?php echo esc_html($product->get_id()); ?>)</span>
  <span class="dashicons dashicons-yes"></span>
  </button>
@@ -3376,12 +3377,25 @@ function moderator_product_assignments_page() {
  var term = $container.find('.aoam-product-search').val().toLowerCase().trim();
  var terms = term ? term.split(/\s+/) : [];
  var visibleCount = 0;
+ var $options = $container.find('.aoam-product-option');
+ var $exactMatches = $();
 
- $container.find('.aoam-product-option').removeClass('is-active').each(function() {
- var optionText = $(this).text().toLowerCase();
+ if (term) {
+ $exactMatches = $options.filter(function() {
+ var productName = String($(this).data('product-name') || '');
+ var productId = String($(this).data('product-id') || '');
+ return productName === term || productId === term;
+ });
+ }
+
+ $options.removeClass('is-active').each(function() {
+ var optionText = String($(this).data('product-search') || $(this).text()).toLowerCase();
  var matches = terms.every(function(part) {
  return optionText.indexOf(part) !== -1;
  });
+ if ($exactMatches.length) {
+ matches = $exactMatches.is(this);
+ }
  $(this).toggle(matches);
  if (matches) {
  visibleCount++;
@@ -3390,6 +3404,7 @@ function moderator_product_assignments_page() {
 
  $container.find('.aoam-product-no-results').toggle(visibleCount === 0);
  $container.find('.aoam-product-option:visible').first().addClass('is-active');
+ $container.find('.aoam-product-match-count').text(visibleCount ? visibleCount + ' match' + (visibleCount > 1 ? 'es' : '') + ' found' : 'No matches');
  return visibleCount;
  }
 
@@ -3601,6 +3616,12 @@ function moderator_product_assignments_page() {
  color: #646970;
  font-weight: 700;
  text-align: center;
+ }
+ .aoam-product-match-count {
+ padding: 4px 8px 8px;
+ color: #646970;
+ font-size: 12px;
+ font-weight: 700;
  }
  .aoam-selected-products {
  display: flex;
