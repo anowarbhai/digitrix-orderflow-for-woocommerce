@@ -4,6 +4,7 @@ Tags: woocommerce, orders, order management, workflow, rest api
 Requires at least: 5.8
 Tested up to: 7.0
 Requires PHP: 7.4
+Requires Plugins: woocommerce
 WC requires at least: 6.0
 Stable tag: 1.2.0
 License: GPLv2 or later
@@ -35,6 +36,8 @@ Remote import requires a WooCommerce REST API consumer key and consumer secret f
 
 Use HTTPS for remote source URLs. Do not use public or shared API credentials.
 
+When a local imported order status is changed, the plugin can use the saved remote source credentials to update the matching order status on the source store.
+
 == Installation ==
 
 1. Upload the plugin folder to `/wp-content/plugins/`.
@@ -60,6 +63,10 @@ No. Operational order assignment history is preserved by design.
 
 Remote imports and delayed assignments rely on WP-Cron. Production sites should configure a real server cron to call WordPress cron regularly.
 
+= What permissions do the remote API keys need? =
+
+Use WooCommerce REST API credentials with the minimum permissions required to read orders and update order status on the connected source store.
+
 == Screenshots ==
 
 1. Order Management dashboard.
@@ -74,6 +81,9 @@ Remote imports and delayed assignments rely on WP-Cron. Production sites should 
 * Added structured assets for admin, Recent Assignments, and Simple Orders pages.
 * Added remote WooCommerce import improvements.
 * Added Recent Assignments flow analytics.
+* Improved Remote Import source management.
+* Improved role assignment settings design.
+* Improved bulk reassignment source and target user selection.
 * Improved repository readiness and documentation.
 
 = 1.1.0 =

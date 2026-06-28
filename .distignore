@@ -1,6 +1,8 @@
 .git
 .gitignore
 .github
+.agents
+.codex
 .distignore
 *.zip
 node_modules

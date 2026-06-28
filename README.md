@@ -33,7 +33,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 | Recent Assignments | `moderator-recent-assignments` | Assigned order table, filters, analytics, export tools |
 | Sequence & Status | `moderator-sequence-status` | Moderator sequence, active/inactive state, shift controls |
 | Product Assignments | `moderator-product-assignments` | Assign products to moderators |
-| Reassign | `moderator-reassign-orders` | Bulk reassignment from inactive users |
+| Reassign | `moderator-reassign-orders` | Bulk reassignment from selected source users to active users |
 | Plugin Settings | `moderator-plugin-settings` | Role and plugin behavior settings |
 | Remote Import | `moderator-remote-import` | Remote WooCommerce source configuration and manual import |
 | My Orders | `moderator-simple-orders` | Moderator-facing order list and mobile card workflow |
@@ -41,7 +41,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 ## File Structure
 
 ```text
-auto-order-assign-to-moderator/
+woocommerce-order-auto-assign-to-moderator/
 |-- woocommerce-order-auto-assign-to-moderator.php
 |-- README.md
 |-- readme.txt
@@ -104,14 +104,15 @@ Order display dates are formatted in `Asia/Dhaka`.
 - External CDN dependencies have been removed.
 - Generated ZIP files should not be committed or packaged.
 - Remote API credentials should be created with the minimum required WooCommerce REST API permissions.
-- Run Plugin Check and PHPCS before final submission.
+- Run the official Plugin Check plugin before final submission.
+- Review any PHPCS warnings before packaging a release.
 
 ## Deployment
 
 On the live server:
 
 ```bash
-cd /path/to/wp-content/plugins/auto-order-assign-to-moderator
+cd /path/to/wp-content/plugins/woocommerce-order-auto-assign-to-moderator
 git pull origin main
 ```
 

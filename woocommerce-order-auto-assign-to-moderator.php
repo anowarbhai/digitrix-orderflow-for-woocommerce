@@ -1118,7 +1118,7 @@ function create_moderator_role_if_not_exists() {
  add_role('moderator', 'Moderator', $moderator_caps);
  
  } else {
- // ADD: Update existing moderator role with missing capabilities
+ // Update existing moderator role with missing capabilities.
  $moderator_role = get_role('moderator');
  
  // Add missing capabilities to existing role
@@ -4486,7 +4486,7 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
 }
 
 function aoam_render_recent_assignments_page_content($ajax_request = false) {
- // ADD: Get assigned roles dynamically
+ // Get assigned roles dynamically.
  $assigned_roles = aoam_get_assigned_roles();
  
  // Get filter parameters
@@ -4544,7 +4544,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="nav-tab">Sequence & Status</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
- <!-- ADD: Plugin Settings tab -->
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
@@ -8649,7 +8648,7 @@ function add_moderator_section_after_order_details($order) {
  'parent' => 'site-name'
  ));
  
- // ADD: Custom logout link in a better position
+ // Custom logout link in a better position.
  $wp_admin_bar->add_node(array(
  'id' => 'moderator-logout',
  'title' => ' Logout',
@@ -9169,7 +9168,7 @@ function moderator_reassign_orders_page() {
  ?>
  
  <div class="wrap">
- <h1> Reassign Orders - Working Version</h1>
+ <h1>Reassign Orders</h1>
  
  <!-- Navigation -->
  <div class="nav-tab-wrapper">
