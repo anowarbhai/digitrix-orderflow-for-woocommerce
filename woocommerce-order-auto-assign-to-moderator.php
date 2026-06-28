@@ -189,6 +189,7 @@ function aoam_plugin_settings_page() {
  <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab nav-tab-active">Plugin Settings</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
 
  <!-- Role Assignment Settings -->
@@ -1903,19 +1904,19 @@ function aoam_get_admin_page_registry() {
  'menu_slug' => 'moderator-plugin-settings',
  'callback' => 'aoam_settings_page',
  ),
- 'remote_import' => array(
- 'page_title' => 'Remote Order Import',
- 'menu_title' => 'Remote Import',
- 'capability' => 'manage_options',
- 'menu_slug' => 'moderator-remote-import',
- 'callback' => 'aoam_remote_import_page',
- ),
  'reassign_orders' => array(
  'page_title' => 'Reassign Orders',
  'menu_title' => 'Reassign',
  'capability' => 'manage_options',
  'menu_slug' => 'moderator-reassign-orders',
  'callback' => 'aoam_reassign_orders_page',
+ ),
+ 'remote_import' => array(
+ 'page_title' => 'Remote Order Import',
+ 'menu_title' => 'Remote Import',
+ 'capability' => 'manage_options',
+ 'menu_slug' => 'moderator-remote-import',
+ 'callback' => 'aoam_remote_import_page',
  ),
  );
 }
@@ -2331,6 +2332,7 @@ function moderator_sequence_status_page() {
  <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
 
  <!-- ... [existing cards and stats code remains the same] ... -->
@@ -3036,6 +3038,7 @@ function moderator_product_assignments_page() {
  <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab nav-tab-active">Product Assignments</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
 
  <!-- Search and Filters Card -->
@@ -3771,6 +3774,7 @@ function moderator_recent_assignments_page() {
  <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-product-assignments')); ?>" class="nav-tab">Product Assignments</a>
  <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-reassign-orders')); ?>" class="nav-tab">Reassign</a>
  <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-plugin-settings')); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo esc_url(admin_url('admin.php?page=moderator-remote-import')); ?>" class="nav-tab">Remote Import</a>
  </div>
  <div id="aoam-recent-assignments-app" class="aoam-ajax-shell">
  <div class="aoam-ajax-loading"><span class="spinner is-active"></span><p>Loading assignments...</p></div>
@@ -4318,6 +4322,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab">Reassign</a>
  <!-- ADD: Plugin Settings tab -->
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
  <?php endif; ?>
 
@@ -8950,6 +8955,7 @@ function moderator_reassign_orders_page() {
  <a href="<?php echo admin_url('admin.php?page=moderator-product-assignments'); ?>" class="nav-tab">Product Assignments</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-reassign-orders'); ?>" class="nav-tab nav-tab-active">Reassign</a>
  <a href="<?php echo admin_url('admin.php?page=moderator-plugin-settings'); ?>" class="nav-tab">Plugin Settings</a>
+ <a href="<?php echo admin_url('admin.php?page=moderator-remote-import'); ?>" class="nav-tab">Remote Import</a>
  </div>
 
  <div class="card">
