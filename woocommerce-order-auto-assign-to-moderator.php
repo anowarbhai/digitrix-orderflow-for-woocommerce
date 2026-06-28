@@ -510,7 +510,58 @@ function aoam_remote_order_import_page() {
  $sources[] = array('site_url' => '', 'consumer_key' => '', 'consumer_secret' => '', 'statuses' => 'processing,pending,on-hold', 'per_page' => 20, 'enabled' => 'yes');
  }
  ?>
- <div style="overflow-x:auto;">
+ <style>
+ #aoam-remote-sources-table {
+ table-layout: fixed;
+ width: 100%;
+ }
+ #aoam-remote-sources-table th,
+ #aoam-remote-sources-table td {
+ padding: 8px 10px;
+ vertical-align: middle;
+ }
+ #aoam-remote-sources-table th:nth-child(1),
+ #aoam-remote-sources-table td:nth-child(1) {
+ width: 34px;
+ text-align: center;
+ }
+ #aoam-remote-sources-table th:nth-child(2),
+ #aoam-remote-sources-table td:nth-child(2) {
+ width: 23%;
+ }
+ #aoam-remote-sources-table th:nth-child(3),
+ #aoam-remote-sources-table td:nth-child(3),
+ #aoam-remote-sources-table th:nth-child(4),
+ #aoam-remote-sources-table td:nth-child(4) {
+ width: 18%;
+ }
+ #aoam-remote-sources-table th:nth-child(5),
+ #aoam-remote-sources-table td:nth-child(5) {
+ width: 18%;
+ }
+ #aoam-remote-sources-table th:nth-child(6),
+ #aoam-remote-sources-table td:nth-child(6) {
+ width: 70px;
+ }
+ #aoam-remote-sources-table th:nth-child(7),
+ #aoam-remote-sources-table td:nth-child(7) {
+ width: 78px;
+ }
+ #aoam-remote-sources-table input[type="url"],
+ #aoam-remote-sources-table input[type="text"],
+ #aoam-remote-sources-table input[type="password"],
+ #aoam-remote-sources-table input[type="number"] {
+ width: 100% !important;
+ max-width: 100%;
+ box-sizing: border-box;
+ }
+ #aoam-remote-sources-table .aoam-remove-source-row {
+ width: 100%;
+ min-height: 32px;
+ padding: 0 8px;
+ }
+ </style>
+ <div style="overflow-x: hidden;">
  <table class="widefat striped" id="aoam-remote-sources-table">
  <thead>
  <tr>
