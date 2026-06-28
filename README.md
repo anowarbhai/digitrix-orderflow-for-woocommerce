@@ -4,13 +4,13 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 
 ## Plugin Metadata
 
-- **Plugin name:** WooCommerce Order Auto Assign To Moderator
-- **Text domain:** `auto-order-assign-moderator`
-- **Requires WordPress:** 5.8+
-- **Requires PHP:** 7.4+
-- **Requires WooCommerce:** 6.0+
-- **Current version:** 1.2.0
-- **License:** GPL v2 or later
+- Plugin name: WooCommerce Order Auto Assign To Moderator
+- Text domain: `auto-order-assign-moderator`
+- Requires WordPress: 5.8+
+- Requires PHP: 7.4+
+- Requires WooCommerce: 6.0+
+- Current version: 1.2.0
+- License: GPLv2 or later
 
 ## Core Features
 
@@ -42,35 +42,35 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 
 ```text
 auto-order-assign-to-moderator/
-├── auto-order-assign-to-moderator.php
-├── README.md
-├── uninstall.php
-├── assets/
-│   ├── css/
-│   │   ├── admin.css
-│   │   ├── recent-assignments.css
-│   │   └── simple-orders.css
-│   └── js/
-│       ├── admin-core.js
-│       ├── recent-assignments.js
-│       └── simple-orders.js
-└── includes/
-    ├── pages/
-    │   ├── dashboard.php
-    │   ├── plugin-settings.php
-    │   ├── product-assignments.php
-    │   ├── recent-assignments.php
-    │   ├── reassign-orders.php
-    │   ├── remote-import.php
-    │   └── sequence-status.php
-    └── pages/
+|-- woocommerce-order-auto-assign-to-moderator.php
+|-- README.md
+|-- readme.txt
+|-- uninstall.php
+|-- assets/
+|   |-- css/
+|   |   |-- admin.css
+|   |   |-- recent-assignments.css
+|   |   `-- simple-orders.css
+|   `-- js/
+|       |-- admin-core.js
+|       |-- recent-assignments.js
+|       `-- simple-orders.js
+`-- includes/
+    `-- pages/
+        |-- dashboard.php
+        |-- plugin-settings.php
+        |-- product-assignments.php
+        |-- recent-assignments.php
+        |-- reassign-orders.php
+        |-- remote-import.php
+        `-- sequence-status.php
 ```
 
-Each admin menu page has its own entry file in `includes/pages/`. The plugin still keeps some legacy rendering code in the main plugin file for compatibility, while the page files act as stable controllers. Shared and page-specific CSS/JS are loaded from `assets/` so deeper template extraction can be done safely without changing public behavior.
+Each admin menu page has its own entry file in `includes/pages/`. The plugin still keeps some legacy rendering code in the main plugin file for compatibility, while the page files act as stable controllers.
 
 ## Remote Import Setup
 
-1. Go to **Order Management → Remote Import**.
+1. Go to **Order Management -> Remote Import**.
 2. Enable remote import.
 3. Add each remote WooCommerce site URL.
 4. Add WooCommerce REST API consumer key and secret.
@@ -91,12 +91,20 @@ If `wp-cron.php` over HTTPS returns `403 Forbidden`, use PHP CLI cron instead of
 
 Recent Assignments date filters use the business-day rule requested for operations:
 
-- **Today:** previous day 10:00 PM to current day 10:00 PM
-- **Yesterday:** previous business window
-- **This Month / Last Month:** calendar month in the WordPress timezone
-- **Custom:** selected start and end date
+- Today: previous day 10:00 PM to current day 10:00 PM
+- Yesterday: previous business window
+- This Month / Last Month: calendar month in the WordPress timezone
+- Custom: selected start and end date
 
 Order display dates are formatted in `Asia/Dhaka`.
+
+## WordPress.org Submission Notes
+
+- `readme.txt` is included for WordPress.org.
+- External CDN dependencies have been removed.
+- Generated ZIP files should not be committed or packaged.
+- Remote API credentials should be created with the minimum required WooCommerce REST API permissions.
+- Run Plugin Check and PHPCS before final submission.
 
 ## Deployment
 
@@ -117,7 +125,7 @@ Then clear any page cache and refresh the WordPress admin page.
 - Run a syntax check before deploy:
 
 ```bash
-php -l auto-order-assign-to-moderator.php
+php -l woocommerce-order-auto-assign-to-moderator.php
 ```
 
 ## Changelog
@@ -125,7 +133,8 @@ php -l auto-order-assign-to-moderator.php
 ### 1.2.0
 
 - Added centralized plugin constants and page-specific asset loading.
-- Added professional README and deployment guidance.
+- Added WordPress.org `readme.txt`.
+- Removed external CDN usage.
 - Added page-specific CSS/JS asset files for Recent Assignments and Simple Orders.
 - Added plugin action links and uninstall guard.
 

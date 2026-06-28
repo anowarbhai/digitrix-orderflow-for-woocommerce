@@ -7,6 +7,8 @@
  * Author: Anowar Hossain
  * Author URI: https://shirinshoes.com/
  * Company: Shirin Fashion
+ * License: GPLv2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: auto-order-assign-moderator
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -445,6 +447,22 @@ function aoam_sanitize_remote_import_sources($raw_sources) {
  return $sources;
 }
 
+add_action('wp_ajax_aoam_run_remote_import_ajax', 'aoam_run_remote_import_ajax_handler');
+function aoam_run_remote_import_ajax_handler() {
+  if (!current_user_can('manage_options')) {
+    wp_send_json_error('You do not have permission to perform this action.');
+  }
+  $nonce = isset($_POST['nonce']) ? sanitize_text_field(wp_unslash($_POST['nonce'])) : '';
+  if (!$nonce || !wp_verify_nonce($nonce, 'aoam_remote_import_run_nonce')) {
+    wp_send_json_error('Security check failed.');
+  }
+  $result = aoam_import_remote_orders();
+  if (is_wp_error($result)) {
+    wp_send_json_error($result->get_error_message());
+  }
+  wp_send_json_success($result);
+}
+
 function aoam_remote_order_import_page() {
  if (!current_user_can('manage_options')) {
  wp_die('You do not have permission to access this page.');
@@ -452,7 +470,6 @@ function aoam_remote_order_import_page() {
 
  $settings = aoam_get_remote_import_settings();
  $message = '';
- $import_result = null;
 
  if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aoam_save_remote_import'])) {
  check_admin_referer('aoam_remote_import_settings', 'aoam_remote_import_nonce');
@@ -460,11 +477,6 @@ function aoam_remote_order_import_page() {
  $settings['sources'] = aoam_sanitize_remote_import_sources($_POST['sources'] ?? array());
  update_option('aoam_remote_import_settings', $settings);
  $message = 'Remote import settings saved.';
- }
-
- if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aoam_run_remote_import'])) {
- check_admin_referer('aoam_remote_import_run', 'aoam_remote_import_run_nonce');
- $import_result = aoam_import_remote_orders();
  }
  ?>
  <div class="wrap">
@@ -483,15 +495,8 @@ function aoam_remote_order_import_page() {
  <div class="notice notice-success"><p><?php echo esc_html($message); ?></p></div>
  <?php endif; ?>
 
- <?php if (is_wp_error($import_result)): ?>
- <div class="notice notice-error"><p><?php echo esc_html($import_result->get_error_message()); ?></p></div>
- <?php elseif (is_array($import_result)): ?>
- <div class="notice notice-success"><p>
- Imported: <?php echo esc_html($import_result['imported']); ?>,
- Skipped: <?php echo esc_html($import_result['skipped']); ?>,
- Failed: <?php echo esc_html($import_result['failed']); ?>
- </p></div>
- <?php endif; ?>
+ <div id="aoam-import-result-container" style="display: none;"></div>
+
 
  <div class="card" style="max-width: 1100px;">
  <h2>Remote WooCommerce API Sources</h2>
@@ -539,89 +544,149 @@ function aoam_remote_order_import_page() {
  <div class="card" style="max-width: 900px;">
  <h2>Manual Import</h2>
  <p>Imports remote orders into this WooCommerce site. Imported orders are assigned by this plugin after creation.</p>
- <form method="post">
- <?php wp_nonce_field('aoam_remote_import_run', 'aoam_remote_import_run_nonce'); ?>
- <button type="submit" name="aoam_run_remote_import" class="button button-primary">Run Import Now</button>
- </form>
+ <button type="button" id="aoam_run_remote_import_btn" class="button button-primary" data-nonce="<?php echo esc_attr(wp_create_nonce('aoam_remote_import_run_nonce')); ?>" style="display: inline-flex; align-items: center; gap: 8px;">
+ <span class="aoam-btn-text">Run Import Now</span>
+ <span class="spinner aoam-spinner" style="float: none; margin: 0 0 0 5px;"></span>
+ </button>
  </div>
  </div>
  <?php
 }
 
 function aoam_import_remote_orders($source_settings = null) {
- $settings = $source_settings ?: aoam_get_remote_import_settings();
- if ($source_settings === null && !empty($settings['sources'])) {
- $total = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
- foreach ($settings['sources'] as $source) {
- if (($source['enabled'] ?? 'yes') !== 'yes') {
- continue;
- }
- $source_result = aoam_import_remote_orders($source);
- if (is_wp_error($source_result)) {
- $total['failed']++;
- continue;
- }
- $total['imported'] += (int) $source_result['imported'];
- $total['skipped'] += (int) $source_result['skipped'];
- $total['failed'] += (int) $source_result['failed'];
- }
- return $total;
- }
- if (empty($settings['site_url']) || empty($settings['consumer_key']) || empty($settings['consumer_secret'])) {
- return new WP_Error('aoam_missing_remote_settings', 'Remote site URL, consumer key, and consumer secret are required.');
- }
+  global $aoam_doing_import_depth;
+  if (!isset($aoam_doing_import_depth)) {
+    $aoam_doing_import_depth = 0;
+  }
+  $aoam_doing_import_depth++;
 
- $statuses = array_filter(array_map('sanitize_key', explode(',', $settings['statuses'])));
- if (empty($statuses)) {
- $statuses = array('processing');
- }
+  try {
+    $settings = $source_settings ?: aoam_get_remote_import_settings();
+    if ($source_settings === null && !empty($settings['sources'])) {
+      $total = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
+      foreach ($settings['sources'] as $source) {
+        if (($source['enabled'] ?? 'yes') !== 'yes') {
+          continue;
+        }
+        $source_result = aoam_import_remote_orders($source);
+        if (is_wp_error($source_result)) {
+          $total['failed']++;
+          continue;
+        }
+        $total['imported'] += (int) $source_result['imported'];
+        $total['skipped'] += (int) $source_result['skipped'];
+        $total['failed'] += (int) $source_result['failed'];
+      }
+      return $total;
+    }
+    if (empty($settings['site_url']) || empty($settings['consumer_key']) || empty($settings['consumer_secret'])) {
+      return new WP_Error('aoam_missing_remote_settings', 'Remote site URL, consumer key, and consumer secret are required.');
+    }
 
- $endpoint = trailingslashit($settings['site_url']) . 'wp-json/wc/v3/orders';
- $url = add_query_arg(array(
- 'per_page' => max(1, min(100, absint($settings['per_page']))),
- 'orderby' => 'date',
- 'order' => 'asc',
- 'status' => implode(',', $statuses),
- ), $endpoint);
+    $statuses = array_filter(array_map('sanitize_key', explode(',', $settings['statuses'])));
+    if (empty($statuses)) {
+      $statuses = array('processing');
+    }
 
- $response = wp_remote_get($url, array(
- 'timeout' => 30,
- 'headers' => array(
- 'Authorization' => 'Basic ' . base64_encode($settings['consumer_key'] . ':' . $settings['consumer_secret']),
- ),
- ));
- if (is_wp_error($response)) {
- return $response;
- }
- $code = wp_remote_retrieve_response_code($response);
- if ($code < 200 || $code >= 300) {
- return new WP_Error('aoam_remote_import_http_error', 'Remote API returned HTTP ' . $code . '.');
- }
+    $endpoint = trailingslashit($settings['site_url']) . 'wp-json/wc/v3/orders';
+    
+    $result = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
+    $page = 1;
+    $per_page = max(1, min(100, absint($settings['per_page'] ?? 20)));
+    $max_pages = 20; // Process up to 20 pages (max 2000 orders) per source to prevent timeouts
+    $keep_fetching = true;
 
- $orders = json_decode(wp_remote_retrieve_body($response), true);
- if (!is_array($orders)) {
- return new WP_Error('aoam_remote_import_bad_json', 'Remote API response was not valid JSON.');
- }
+    while ($keep_fetching && $page <= $max_pages) {
+      if (php_sapi_name() === 'cli') {
+        echo "  -> Fetching Page {$page}... URL: " . esc_url($endpoint) . " (Limit: {$per_page})\n";
+      }
+      $url = add_query_arg(array(
+        'per_page' => $per_page,
+        'page'     => $page,
+        'orderby'  => 'date',
+        'order'    => 'desc',
+        'status'   => implode(',', $statuses),
+      ), $endpoint);
 
- $result = array('imported' => 0, 'skipped' => 0, 'failed' => 0);
- foreach ($orders as $remote_order) {
- if (empty($remote_order['id'])) {
- $result['failed']++;
- continue;
- }
- $created = aoam_create_order_from_remote_order($remote_order, $settings['site_url']);
- if (is_wp_error($created)) {
- if ($created->get_error_code() === 'aoam_remote_order_exists') {
- $result['skipped']++;
- } else {
- $result['failed']++;
- }
- continue;
- }
- $result['imported']++;
- }
+      $response = wp_remote_get($url, array(
+        'timeout' => 30,
+        'headers' => array(
+          'Authorization' => 'Basic ' . base64_encode($settings['consumer_key'] . ':' . $settings['consumer_secret']),
+        ),
+      ));
 
- return $result;
+      if (is_wp_error($response)) {
+        if (php_sapi_name() === 'cli') {
+          echo "     WP_Error during fetch: " . $response->get_error_message() . "\n";
+        }
+        if ($page === 1) {
+          return $response;
+        }
+        break;
+      }
+
+      $code = wp_remote_retrieve_response_code($response);
+      if (php_sapi_name() === 'cli') {
+        echo "     HTTP Code: {$code}\n";
+      }
+      if ($code < 200 || $code >= 300) {
+        if ($page === 1) {
+          return new WP_Error('aoam_remote_import_http_error', 'Remote API returned HTTP ' . $code . '.');
+        }
+        break;
+      }
+
+      $orders = json_decode(wp_remote_retrieve_body($response), true);
+      if (!is_array($orders) || empty($orders)) {
+        if (php_sapi_name() === 'cli') {
+          echo "     No orders found or invalid JSON on Page {$page}.\n";
+        }
+        break;
+      }
+
+      if (php_sapi_name() === 'cli') {
+        echo "     Found " . count($orders) . " orders on Page {$page}. Processing...\n";
+      }
+
+      $new_imported_in_page = 0;
+      $skipped_in_page = 0;
+
+      foreach ($orders as $remote_order) {
+        if (empty($remote_order['id'])) {
+          $result['failed']++;
+          continue;
+        }
+        if (php_sapi_name() === 'cli') {
+          echo "       - Checking remote ID: {$remote_order['id']}...\n";
+        }
+        $created = aoam_create_order_from_remote_order($remote_order, $settings['site_url']);
+        if (is_wp_error($created)) {
+          if ($created->get_error_code() === 'aoam_remote_order_exists') {
+            $result['skipped']++;
+            $skipped_in_page++;
+          } else {
+            $result['failed']++;
+            if (php_sapi_name() === 'cli') {
+              echo "     Failed to import remote order ID: " . $remote_order['id'] . " - " . $created->get_error_message() . "\n";
+            }
+          }
+          continue;
+        }
+        $result['imported']++;
+        $new_imported_in_page++;
+      }
+
+      if (php_sapi_name() === 'cli') {
+        echo "     Page {$page} Done. Imported: {$new_imported_in_page}, Skipped: {$skipped_in_page}, Failed: " . ($result['failed']) . "\n";
+      }
+
+      $page++;
+    }
+
+    return $result;
+  } finally {
+    $aoam_doing_import_depth--;
+  }
 }
 
 function aoam_create_order_from_remote_order($remote_order, $source_url) {
@@ -1753,7 +1818,11 @@ function assign_order_to_specific_moderator($order_id, $order, $delayed = false)
 
 // Updated notification function with shift info
 function send_moderator_notification($moderator, $order, $shift_info = null, $delayed = false) {
- $to = $moderator->user_email;
+  global $aoam_doing_import_depth;
+  if (!empty($aoam_doing_import_depth) && $aoam_doing_import_depth > 0) {
+    return; // Skip email notifications during remote order import to prevent execution timeouts
+  }
+  $to = $moderator->user_email;
  $subject = 'New Order Assigned to You - Moderator ' . get_user_meta($moderator->ID, 'moderator_sequence', true);
  
  $delay_info = $delayed ? "\n\n Note: This assignment was delayed for 5 minutes due to partial order status." : "";
@@ -3228,13 +3297,15 @@ function moderator_product_assignments_page() {
  <!-- Select2 Implementation Script -->
  <script type="text/javascript">
  jQuery(document).ready(function($) {
- // Initialize Select2 on all product selects
+ // Enhance product selects only when a local select enhancement library is available.
+ if ($.fn.select2) {
  $('.moderator-products-select').select2({
  placeholder: "Select products - Required for specialized assignment",
  allowClear: true,
  width: '100%',
  closeOnSelect: false
  });
+ }
 
  // Clear products for specific user
  $('.clear-products').on('click', function(e) {
@@ -3246,7 +3317,6 @@ function moderator_product_assignments_page() {
  var $assignmentSummary = $select.siblings('.assignment-summary');
  
  if (confirm('Are you sure you want to clear ALL product assignments for ' + userName + '?')) {
- // Clear Select2
  $select.val(null).trigger('change');
  
  // Update assignment summary
@@ -3372,45 +3442,6 @@ function moderator_product_assignments_page() {
  <?php
 }
 
-
-// Enqueue Select2 CSS and JS from CDN
-add_action('admin_enqueue_scripts', 'enqueue_select2_assets');
-
-function enqueue_select2_assets($hook) {
- if (strpos($hook, 'moderator-') !== false) {
- wp_enqueue_style('select2-css', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css', array(), '4.0.13');
- wp_enqueue_script('select2-js', 'https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js', array('jquery'), '4.0.13', true);
- 
- wp_add_inline_style('select2-css', '
- .select2-container {
- width: 100% !important;
- }
- .select2-selection--multiple {
- min-height: 90px !important;
- border: 1px solid #ddd !important;
- border-radius: 4px !important;
- }
- .select2-selection--multiple .select2-selection__choice {
- background: #0073aa !important;
- color: white !important;
- border: none !important;
- border-radius: 3px !important;
- padding: 2px 8px !important;
- margin: 2px !important;
- }
- .select2-selection--multiple .select2-selection__choice__remove {
- color: white !important;
- margin-right: 5px !important;
- }
- .select2-selection--multiple .select2-selection__choice__remove:hover {
- color: #ffcccc !important;
- }
- .assigned-products-container {
- max-width: 300px;
- }
- ');
- }
-}
 
 function moderator_recent_assignments_page() {
  ?>
@@ -8630,11 +8661,12 @@ function moderator_reassign_orders_page() {
  <?php foreach ($inactive_users as $user): 
  $order_count = count_user_orders($user['ID']);
  $status_counts = get_user_order_status_counts($user['ID']);
+ $user_initial = strtoupper(substr($user['display_name'], 0, 1));
  ?>
- <div class="user-card inactive-user-card" data-user-id="<?php echo $user['ID']; ?>">
+ <div class="user-card inactive-user-card" data-user-id="<?php echo esc_attr($user['ID']); ?>">
  <div class="user-card-header">
  <div class="user-avatar" style="background: #dc3232;position: relative;border-radius: 50px;overflow: hidden;">
- <img alt="" src="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g" srcset="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g 2x" class="avatar avatar-50 photo" height="50" width="50" decoding="async">
+ <span class="aoam-user-initial"><?php echo esc_html($user_initial); ?></span>
  <span class="inactiveuser" style="position: absolute; right: 3px;top: 6px;font-size: 12px;"></span>
  </div>
  <div class="user-info">
@@ -8644,7 +8676,7 @@ function moderator_reassign_orders_page() {
  </div>
  
  <button type="button" class="button button-primary select-inactive-btn" 
- data-user-id="<?php echo $user['ID']; ?>"
+ data-user-id="<?php echo esc_attr($user['ID']); ?>"
  data-user-name="<?php echo esc_attr($user['display_name']); ?>">
  Select This Inactive User
  </button>
@@ -8661,12 +8693,12 @@ function moderator_reassign_orders_page() {
  
  <div class="user-grid">
  <?php foreach ($active_users as $user): ?>
+ <?php $user_initial = strtoupper(substr($user['display_name'], 0, 1)); ?>
  <div class="user-card active-user-card">
  <div class="user-card-header">
- <div class="user-avatar" style="background: #46b450;"><div class="user-avatar" style="background: #dc3232;position: relative;border-radius: 50px;overflow: hidden;">
- <img alt="" src="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g" srcset="https://secure.gravatar.com/avatar/062dae7b9d785c0685055974a71c95186e7bc4cf71d195486db6393ec0f21bf5?s=64&amp;d=mm&amp;r=g 2x" class="avatar avatar-50 photo" height="50" width="50" decoding="async">
- <span class="inactiveuser" style="position: absolute; right: 3px;top: 6px;font-size: 12px;"></span>
- </div></div>
+ <div class="user-avatar" style="background: #46b450;position: relative;border-radius: 50px;overflow: hidden;">
+ <span class="aoam-user-initial"><?php echo esc_html($user_initial); ?></span>
+ </div>
  <div class="user-info">
  <h4><?php echo esc_html($user['display_name']); ?></h4>
  <p class="user-meta">User <?php echo $user['sequence']; ?></p>
@@ -8675,7 +8707,7 @@ function moderator_reassign_orders_page() {
  
  <div class="user-actions">
  <label class="checkbox-container">
- <input type="checkbox" class="active-user-checkbox" value="<?php echo $user['ID']; ?>">
+ <input type="checkbox" class="active-user-checkbox" value="<?php echo esc_attr($user['ID']); ?>">
  <span class="checkmark"></span>
  Select User
  </label>
