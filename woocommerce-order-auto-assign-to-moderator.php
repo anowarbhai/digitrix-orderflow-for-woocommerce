@@ -3143,7 +3143,7 @@ function moderator_product_assignments_page() {
  <th style="width: 150px;">User Name</th>
  <th style="width: 100px;">Status</th>
  <th style="width: 100px;">Shift Status</th>
- <th style="width: 300px;">Assigned Products</th>
+ <th style="width: 430px;">Assigned Products</th>
  <th style="width: 120px;">Actions</th>
  </tr>
  </thead>
@@ -3200,15 +3200,21 @@ function moderator_product_assignments_page() {
  </td>
  <td>
  <div class="assigned-products-container">
- <!-- Product Selection with Select2 -->
- <select name="moderator_products[<?php echo $user->ID; ?>][]" multiple="multiple" class="moderator-products-select" style="width: 100%;">
+ <div class="aoam-product-picker">
+ <div class="aoam-product-picker-toolbar">
+ <input type="search" class="aoam-product-search" placeholder="Search products..." aria-label="Search assigned products">
+ <span class="aoam-product-selected-count"><?php echo esc_html(count($assigned_products)); ?> selected</span>
+ </div>
+ <select name="moderator_products[<?php echo esc_attr($user->ID); ?>][]" multiple="multiple" class="moderator-products-select" size="6">
  <?php foreach ($products as $product): ?>
- <option value="<?php echo $product->get_id(); ?>" 
- <?php selected(in_array($product->get_id(), $assigned_products)); ?>>
+ <option value="<?php echo esc_attr($product->get_id()); ?>" 
+ <?php selected(in_array($product->get_id(), $assigned_products, true)); ?>>
  <?php echo esc_html($product->get_name()); ?> (ID: <?php echo $product->get_id(); ?>)
  </option>
  <?php endforeach; ?>
  </select>
+ <div class="aoam-selected-products" aria-live="polite"></div>
+ </div>
  
  <!-- Current Assignment Summary -->
  <div class="assignment-summary">
@@ -3294,18 +3300,72 @@ function moderator_product_assignments_page() {
  </div>
  </div>
 
- <!-- Select2 Implementation Script -->
+ <!-- Native Product Assignment Script -->
  <script type="text/javascript">
  jQuery(document).ready(function($) {
- // Enhance product selects only when a local select enhancement library is available.
- if ($.fn.select2) {
- $('.moderator-products-select').select2({
- placeholder: "Select products - Required for specialized assignment",
- allowClear: true,
- width: '100%',
- closeOnSelect: false
- });
+ function aoamGetNoAssignmentHtml() {
+ return '<div class="no-assignment">' +
+ '<span class="dashicons dashicons-warning"></span>' +
+ '<div class="warning-text">' +
+ '<strong>No Products Assigned</strong>' +
+ '<span>This user will receive general orders only</span>' +
+ '</div>' +
+ '</div>';
  }
+
+ function aoamGetAssignmentHtml(count) {
+ var label = count > 1 ? 'Products Assigned' : 'Product Assigned';
+ return '<div class="has-assignment">' +
+ '<div class="assignment-header">' +
+ '<span class="dashicons dashicons-yes-alt"></span>' +
+ '<div class="assignment-stats">' +
+ '<strong>' + count + ' ' + label + '</strong>' +
+ '<span>Will receive orders for these products</span>' +
+ '</div>' +
+ '</div>' +
+ '</div>';
+ }
+
+ function aoamUpdateProductPicker($container) {
+ var $select = $container.find('.moderator-products-select');
+ var selectedOptions = $select.find('option:selected').toArray();
+ var selectedCount = selectedOptions.length;
+ var $chips = $container.find('.aoam-selected-products');
+
+ $container.find('.aoam-product-selected-count').text(selectedCount + ' selected');
+ $container.find('.assignment-summary').html(selectedCount ? aoamGetAssignmentHtml(selectedCount) : aoamGetNoAssignmentHtml());
+
+ $chips.empty();
+ if (!selectedCount) {
+ $chips.append($('<span>', { 'class': 'aoam-product-empty-chip', text: 'No products selected' }));
+ return;
+ }
+
+ selectedOptions.slice(0, 5).forEach(function(option) {
+ $chips.append($('<span>', { 'class': 'aoam-product-chip', text: $(option).text() }));
+ });
+
+ if (selectedCount > 5) {
+ $chips.append($('<span>', { 'class': 'aoam-product-more-chip', text: '+ ' + (selectedCount - 5) + ' more' }));
+ }
+ }
+
+ $('.assigned-products-container').each(function() {
+ aoamUpdateProductPicker($(this));
+ });
+
+ $('.moderator-products-select').on('change', function() {
+ aoamUpdateProductPicker($(this).closest('.assigned-products-container'));
+ });
+
+ $('.aoam-product-search').on('input', function() {
+ var term = $(this).val().toLowerCase();
+ var $container = $(this).closest('.assigned-products-container');
+ $container.find('.moderator-products-select option').each(function() {
+ var optionText = $(this).text().toLowerCase();
+ $(this).toggle(!term || optionText.indexOf(term) !== -1 || this.selected);
+ });
+ });
 
  // Clear products for specific user
  $('.clear-products').on('click', function(e) {
@@ -3313,22 +3373,13 @@ function moderator_product_assignments_page() {
  
  var $button = $(this);
  var userName = $button.closest('tr').find('.user-info strong').text();
- var $select = $button.closest('tr').find('.moderator-products-select');
- var $assignmentSummary = $select.siblings('.assignment-summary');
+ var $container = $button.closest('tr').find('.assigned-products-container');
+ var $select = $container.find('.moderator-products-select');
  
  if (confirm('Are you sure you want to clear ALL product assignments for ' + userName + '?')) {
  $select.val(null).trigger('change');
- 
- // Update assignment summary
- $assignmentSummary.html(`
- <div class="no-assignment">
- <span class="dashicons dashicons-warning"></span>
- <div class="warning-text">
- <strong>No Products Assigned</strong>
- <span>This user will receive general orders only</span>
- </div>
- </div>
- `);
+ $container.find('.aoam-product-search').val('').trigger('input');
+ aoamUpdateProductPicker($container);
  
  // Show success feedback
  $button.html('<span class="dashicons dashicons-yes"></span> Cleared!').prop('disabled', true);
@@ -3347,6 +3398,83 @@ function moderator_product_assignments_page() {
 
  <style>
  .card{max-width: 100%;}
+ .assigned-products-container {
+ max-width: 100%;
+ }
+ .aoam-product-picker {
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ background: #fff;
+ padding: 10px;
+ }
+ .aoam-product-picker-toolbar {
+ display: flex;
+ gap: 10px;
+ align-items: center;
+ margin-bottom: 8px;
+ }
+ .aoam-product-search {
+ flex: 1 1 auto;
+ min-height: 34px;
+ border-color: #c3c4c7;
+ border-radius: 6px;
+ }
+ .aoam-product-selected-count {
+ flex: 0 0 auto;
+ padding: 6px 9px;
+ border-radius: 999px;
+ background: #f0f6ff;
+ color: #2271b1;
+ font-size: 12px;
+ font-weight: 700;
+ }
+ .moderator-products-select {
+ width: 100%;
+ min-height: 132px;
+ border-color: #c3c4c7;
+ border-radius: 6px;
+ padding: 6px;
+ background: #fbfbfc;
+ }
+ .moderator-products-select option {
+ padding: 6px 8px;
+ border-radius: 4px;
+ margin: 2px 0;
+ }
+ .moderator-products-select option:checked {
+ background: #2271b1 linear-gradient(0deg, #2271b1 0%, #2271b1 100%);
+ color: #fff;
+ }
+ .aoam-selected-products {
+ display: flex;
+ flex-wrap: wrap;
+ gap: 6px;
+ margin-top: 9px;
+ }
+ .aoam-product-chip,
+ .aoam-product-more-chip,
+ .aoam-product-empty-chip {
+ display: inline-flex;
+ align-items: center;
+ max-width: 100%;
+ padding: 5px 8px;
+ border-radius: 999px;
+ font-size: 12px;
+ font-weight: 700;
+ line-height: 1.2;
+ }
+ .aoam-product-chip {
+ background: #e7f3ff;
+ color: #1d4f7a;
+ }
+ .aoam-product-more-chip {
+ background: #f0f0f1;
+ color: #50575e;
+ }
+ .aoam-product-empty-chip {
+ background: #fff8e5;
+ color: #8a6d3b;
+ }
  .sequence-badge {
  display: inline-block;
  width: 30px;
