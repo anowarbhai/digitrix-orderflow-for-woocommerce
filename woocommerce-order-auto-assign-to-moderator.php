@@ -3205,7 +3205,7 @@ function moderator_product_assignments_page() {
  <input type="search" class="aoam-product-search" placeholder="Search products..." aria-label="Search assigned products">
  <span class="aoam-product-selected-count"><?php echo esc_html(count($assigned_products)); ?> selected</span>
  </div>
- <select name="moderator_products[<?php echo esc_attr($user->ID); ?>][]" multiple="multiple" class="moderator-products-select" size="6">
+ <select name="moderator_products[<?php echo esc_attr($user->ID); ?>][]" multiple="multiple" class="moderator-products-select aoam-hidden-product-select" aria-hidden="true" tabindex="-1">
  <?php foreach ($products as $product): ?>
  <option value="<?php echo esc_attr($product->get_id()); ?>" 
  <?php selected(in_array($product->get_id(), $assigned_products, true)); ?>>
@@ -3213,6 +3213,15 @@ function moderator_product_assignments_page() {
  </option>
  <?php endforeach; ?>
  </select>
+ <div class="aoam-product-options" role="listbox" aria-label="Assigned products">
+ <?php foreach ($products as $product): ?>
+ <?php $is_selected_product = in_array($product->get_id(), $assigned_products, true); ?>
+ <button type="button" class="aoam-product-option <?php echo $is_selected_product ? 'is-selected' : ''; ?>" data-product-id="<?php echo esc_attr($product->get_id()); ?>" aria-selected="<?php echo $is_selected_product ? 'true' : 'false'; ?>">
+ <span><?php echo esc_html($product->get_name()); ?> (ID: <?php echo esc_html($product->get_id()); ?>)</span>
+ <span class="dashicons dashicons-yes"></span>
+ </button>
+ <?php endforeach; ?>
+ </div>
  <div class="aoam-selected-products" aria-live="polite"></div>
  </div>
  
@@ -3331,9 +3340,16 @@ function moderator_product_assignments_page() {
  var selectedOptions = $select.find('option:selected').toArray();
  var selectedCount = selectedOptions.length;
  var $chips = $container.find('.aoam-selected-products');
+ var selectedValues = selectedOptions.map(function(option) {
+ return String(option.value);
+ });
 
  $container.find('.aoam-product-selected-count').text(selectedCount + ' selected');
  $container.find('.assignment-summary').html(selectedCount ? aoamGetAssignmentHtml(selectedCount) : aoamGetNoAssignmentHtml());
+ $container.find('.aoam-product-option').each(function() {
+ var isSelected = selectedValues.indexOf(String($(this).data('product-id'))) !== -1;
+ $(this).toggleClass('is-selected', isSelected).attr('aria-selected', isSelected ? 'true' : 'false');
+ });
 
  $chips.empty();
  if (!selectedCount) {
@@ -3361,10 +3377,25 @@ function moderator_product_assignments_page() {
  $('.aoam-product-search').on('input', function() {
  var term = $(this).val().toLowerCase();
  var $container = $(this).closest('.assigned-products-container');
- $container.find('.moderator-products-select option').each(function() {
+ $container.find('.aoam-product-option').each(function() {
  var optionText = $(this).text().toLowerCase();
- $(this).toggle(!term || optionText.indexOf(term) !== -1 || this.selected);
+ $(this).toggle(!term || optionText.indexOf(term) !== -1 || $(this).hasClass('is-selected'));
  });
+ });
+
+ $('.aoam-product-option').on('click', function() {
+ var $button = $(this);
+ var productId = String($button.data('product-id'));
+ var $container = $button.closest('.assigned-products-container');
+ var $select = $container.find('.moderator-products-select');
+ var option = $select.find('option[value="' + productId.replace(/"/g, '\\"') + '"]').get(0);
+
+ if (!option) {
+ return;
+ }
+
+ option.selected = !option.selected;
+ $select.trigger('change');
  });
 
  // Clear products for specific user
@@ -3428,22 +3459,54 @@ function moderator_product_assignments_page() {
  font-size: 12px;
  font-weight: 700;
  }
- .moderator-products-select {
- width: 100%;
- min-height: 132px;
- border-color: #c3c4c7;
+ .aoam-hidden-product-select {
+ position: absolute !important;
+ width: 1px !important;
+ height: 1px !important;
+ overflow: hidden !important;
+ clip: rect(1px, 1px, 1px, 1px) !important;
+ white-space: nowrap !important;
+ }
+ .aoam-product-options {
+ max-height: 190px;
+ overflow-y: auto;
+ border: 1px solid #c3c4c7;
  border-radius: 6px;
- padding: 6px;
  background: #fbfbfc;
+ padding: 6px;
  }
- .moderator-products-select option {
- padding: 6px 8px;
- border-radius: 4px;
+ .aoam-product-option {
+ display: flex;
+ align-items: center;
+ justify-content: space-between;
+ gap: 10px;
+ width: 100%;
+ min-height: 34px;
  margin: 2px 0;
+ padding: 7px 9px;
+ border: 0;
+ border-radius: 5px;
+ background: transparent;
+ color: #1d2327;
+ cursor: pointer;
+ text-align: left;
  }
- .moderator-products-select option:checked {
- background: #2271b1 linear-gradient(0deg, #2271b1 0%, #2271b1 100%);
+ .aoam-product-option:hover {
+ background: #f0f6ff;
+ }
+ .aoam-product-option.is-selected {
+ background: #2271b1;
  color: #fff;
+ }
+ .aoam-product-option .dashicons {
+ display: none;
+ flex: 0 0 auto;
+ font-size: 16px;
+ height: 16px;
+ width: 16px;
+ }
+ .aoam-product-option.is-selected .dashicons {
+ display: inline-block;
  }
  .aoam-selected-products {
  display: flex;
