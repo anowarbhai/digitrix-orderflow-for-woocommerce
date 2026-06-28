@@ -3366,6 +3366,11 @@ function moderator_product_assignments_page() {
  }
  }
 
+ function aoamOpenProductPicker($container) {
+ $('.aoam-product-picker.is-open').not($container.find('.aoam-product-picker')).removeClass('is-open');
+ $container.find('.aoam-product-picker').addClass('is-open');
+ }
+
  $('.assigned-products-container').each(function() {
  aoamUpdateProductPicker($(this));
  });
@@ -3377,10 +3382,15 @@ function moderator_product_assignments_page() {
  $('.aoam-product-search').on('input', function() {
  var term = $(this).val().toLowerCase();
  var $container = $(this).closest('.assigned-products-container');
+ aoamOpenProductPicker($container);
  $container.find('.aoam-product-option').each(function() {
  var optionText = $(this).text().toLowerCase();
  $(this).toggle(!term || optionText.indexOf(term) !== -1 || $(this).hasClass('is-selected'));
  });
+ });
+
+ $('.aoam-product-search, .aoam-product-selected-count, .aoam-selected-products').on('focus click', function() {
+ aoamOpenProductPicker($(this).closest('.assigned-products-container'));
  });
 
  $('.aoam-product-option').on('click', function() {
@@ -3396,6 +3406,12 @@ function moderator_product_assignments_page() {
 
  option.selected = !option.selected;
  $select.trigger('change');
+ });
+
+ $(document).on('click', function(e) {
+ if (!$(e.target).closest('.aoam-product-picker').length) {
+ $('.aoam-product-picker').removeClass('is-open');
+ }
  });
 
  // Clear products for specific user
@@ -3433,16 +3449,16 @@ function moderator_product_assignments_page() {
  max-width: 100%;
  }
  .aoam-product-picker {
+ position: relative;
  border: 1px solid #dcdcde;
  border-radius: 8px;
  background: #fff;
- padding: 10px;
+ padding: 8px;
  }
  .aoam-product-picker-toolbar {
  display: flex;
  gap: 10px;
  align-items: center;
- margin-bottom: 8px;
  }
  .aoam-product-search {
  flex: 1 1 auto;
@@ -3468,12 +3484,22 @@ function moderator_product_assignments_page() {
  white-space: nowrap !important;
  }
  .aoam-product-options {
+ display: none;
+ position: absolute;
+ left: 8px;
+ right: 8px;
+ top: 48px;
+ z-index: 100;
  max-height: 190px;
  overflow-y: auto;
  border: 1px solid #c3c4c7;
  border-radius: 6px;
- background: #fbfbfc;
+ background: #fff;
  padding: 6px;
+ box-shadow: 0 8px 20px rgba(0,0,0,0.14);
+ }
+ .aoam-product-picker.is-open .aoam-product-options {
+ display: block;
  }
  .aoam-product-option {
  display: flex;
@@ -3512,7 +3538,7 @@ function moderator_product_assignments_page() {
  display: flex;
  flex-wrap: wrap;
  gap: 6px;
- margin-top: 9px;
+ margin-top: 7px;
  }
  .aoam-product-chip,
  .aoam-product-more-chip,
