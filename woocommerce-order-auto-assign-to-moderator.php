@@ -2893,7 +2893,11 @@ function moderator_product_assignments_page() {
  foreach ($all_users as $user_id) {
  if (isset($_POST['moderator_products'][$user_id])) {
  // Products were selected for this user
- $product_ids = array_map('intval', $_POST['moderator_products'][$user_id]);
+ $raw_product_ids = wp_unslash($_POST['moderator_products'][$user_id]);
+ if (!is_array($raw_product_ids)) {
+ $raw_product_ids = array($raw_product_ids);
+ }
+ $product_ids = array_map('absint', $raw_product_ids);
  $product_ids = array_filter($product_ids); // Remove empty values
  update_user_meta($user_id, 'moderator_assigned_products', $product_ids);
  $updated_count++;
@@ -2911,10 +2915,17 @@ function moderator_product_assignments_page() {
  
  // Handle bulk actions for product assignments
  if (isset($_POST['bulk_product_action']) && wp_verify_nonce($_POST['moderator_nonce'], 'moderator_settings')) {
- $bulk_action = $_POST['bulk_product_action'] ?? '';
- $user_ids = isset($_POST['user_ids']) ? array_map('intval', $_POST['user_ids']) : array();
+ $bulk_action = isset($_POST['bulk_product_action']) ? sanitize_key(wp_unslash($_POST['bulk_product_action'])) : '';
+ $raw_user_ids = isset($_POST['user_ids']) ? wp_unslash($_POST['user_ids']) : array();
+ if (is_string($raw_user_ids)) {
+ $raw_user_ids = array_filter(array_map('trim', explode(',', $raw_user_ids)));
+ }
+ if (!is_array($raw_user_ids)) {
+ $raw_user_ids = array();
+ }
+ $user_ids = array_values(array_filter(array_map('absint', $raw_user_ids)));
  
- if ($bulk_action === 'clear_all_products' && empty($user_ids)) {
+ if ($bulk_action === 'clear_all_products') {
  // Clear all users
  $users = get_users(array('role__in' => $assigned_roles));
  foreach ($users as $user) {
