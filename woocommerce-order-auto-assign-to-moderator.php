@@ -193,25 +193,159 @@ function aoam_plugin_settings_page() {
  </div>
 
  <!-- Role Assignment Settings -->
- <div class="card">
-            <h2>User Role Assignment Settings</h2>
+ <div class="card aoam-role-settings-card">
+ <div class="aoam-settings-card-header">
+ <div>
+ <h2>User Role Assignment Settings</h2>
+ <p>Select which WordPress roles can receive assigned orders.</p>
+ </div>
+ <span class="aoam-role-count"><?php echo esc_html(count($current_roles)); ?> selected</span>
+ </div>
  <form method="post">
  <?php wp_nonce_field('aoam_settings', 'aoam_settings_nonce'); ?>
- <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+ <div class="aoam-role-grid">
  <?php foreach ($all_roles as $role_key => $role_name): 
  if ($role_key === 'administrator') continue;
+ $is_checked = in_array($role_key, $current_roles, true);
  ?>
- <label style="display: flex; align-items: center; gap: 10px; padding: 10px; background: #f8f9fa; border-radius: 4px;">
- <input type="checkbox" name="assigned_roles[]" value="<?php echo esc_attr($role_key); ?>" 
- <?php checked(in_array($role_key, $current_roles)); ?>>
+ <label class="aoam-role-option <?php echo $is_checked ? 'is-selected' : ''; ?>">
+ <input type="checkbox" name="assigned_roles[]" value="<?php echo esc_attr($role_key); ?>" <?php checked($is_checked); ?>>
+ <span class="aoam-role-check"></span>
+ <span class="aoam-role-copy">
  <strong><?php echo esc_html($role_name); ?></strong>
- <code style="font-size: 11px; color: #666;"><?php echo $role_key; ?></code>
+ <code><?php echo esc_html($role_key); ?></code>
+ </span>
  </label>
  <?php endforeach; ?>
  </div>
- <input type="submit" name="update_aoam_settings" class="button button-primary" value=" Save Role Settings">
+ <div class="aoam-role-actions">
+ <input type="submit" name="update_aoam_settings" class="button button-primary" value="Save Role Settings">
+ </div>
  </form>
  </div>
+ <style>
+ .aoam-role-settings-card {
+ max-width: 980px;
+ padding: 24px;
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+ }
+ .aoam-settings-card-header {
+ display: flex;
+ align-items: flex-start;
+ justify-content: space-between;
+ gap: 20px;
+ margin-bottom: 18px;
+ }
+ .aoam-settings-card-header h2 {
+ margin: 0 0 6px;
+ font-size: 18px;
+ }
+ .aoam-settings-card-header p {
+ margin: 0;
+ color: #646970;
+ }
+ .aoam-role-count {
+ flex: 0 0 auto;
+ padding: 6px 10px;
+ border-radius: 999px;
+ background: #edf4ff;
+ color: #0b5cab;
+ font-weight: 700;
+ font-size: 12px;
+ }
+ .aoam-role-grid {
+ display: grid;
+ grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+ gap: 12px;
+ margin: 18px 0 20px;
+ }
+ .aoam-role-option {
+ display: flex;
+ align-items: center;
+ gap: 12px;
+ min-height: 58px;
+ padding: 12px 14px;
+ border: 1px solid #dcdcde;
+ border-radius: 8px;
+ background: #fff;
+ cursor: pointer;
+ transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+ }
+ .aoam-role-option:hover {
+ border-color: #72aee6;
+ box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+ }
+ .aoam-role-option.is-selected {
+ border-color: #2271b1;
+ background: #f0f6fc;
+ box-shadow: inset 3px 0 0 #2271b1;
+ }
+ .aoam-role-option input {
+ position: absolute;
+ opacity: 0;
+ pointer-events: none;
+ }
+ .aoam-role-check {
+ width: 20px;
+ height: 20px;
+ border: 2px solid #8c8f94;
+ border-radius: 5px;
+ background: #fff;
+ box-sizing: border-box;
+ position: relative;
+ flex: 0 0 auto;
+ }
+ .aoam-role-option.is-selected .aoam-role-check {
+ border-color: #2271b1;
+ background: #2271b1;
+ }
+ .aoam-role-option.is-selected .aoam-role-check:after {
+ content: "";
+ position: absolute;
+ left: 5px;
+ top: 2px;
+ width: 5px;
+ height: 10px;
+ border: solid #fff;
+ border-width: 0 2px 2px 0;
+ transform: rotate(45deg);
+ }
+ .aoam-role-copy {
+ display: flex;
+ flex-direction: column;
+ gap: 4px;
+ min-width: 0;
+ }
+ .aoam-role-copy strong {
+ font-size: 14px;
+ color: #1d2327;
+ }
+ .aoam-role-copy code {
+ width: fit-content;
+ font-size: 11px;
+ color: #50575e;
+ background: #f6f7f7;
+ border-radius: 4px;
+ padding: 2px 6px;
+ }
+ .aoam-role-actions {
+ display: flex;
+ justify-content: flex-end;
+ padding-top: 4px;
+ }
+ </style>
+ <script>
+ jQuery(function($) {
+ $('.aoam-role-option input').on('change', function() {
+ var $option = $(this).closest('.aoam-role-option');
+ $option.toggleClass('is-selected', this.checked);
+ var selectedCount = $('.aoam-role-option input:checked').length;
+ $('.aoam-role-count').text(selectedCount + ' selected');
+ });
+ });
+ </script>
 
  <!-- Shift Settings -->
  <div class="card" style="max-width:100%;">
