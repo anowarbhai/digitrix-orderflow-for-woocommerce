@@ -3221,6 +3221,7 @@ function moderator_product_assignments_page() {
  <span class="dashicons dashicons-yes"></span>
  </button>
  <?php endforeach; ?>
+ <div class="aoam-product-no-results">No products found</div>
  </div>
  <div class="aoam-selected-products" aria-live="polite"></div>
  </div>
@@ -3371,22 +3372,72 @@ function moderator_product_assignments_page() {
  $container.find('.aoam-product-picker').addClass('is-open');
  }
 
+ function aoamFilterProductOptions($container) {
+ var term = $container.find('.aoam-product-search').val().toLowerCase().trim();
+ var terms = term ? term.split(/\s+/) : [];
+ var visibleCount = 0;
+
+ $container.find('.aoam-product-option').removeClass('is-active').each(function() {
+ var optionText = $(this).text().toLowerCase();
+ var matches = terms.every(function(part) {
+ return optionText.indexOf(part) !== -1;
+ });
+ $(this).toggle(matches);
+ if (matches) {
+ visibleCount++;
+ }
+ });
+
+ $container.find('.aoam-product-no-results').toggle(visibleCount === 0);
+ $container.find('.aoam-product-option:visible').first().addClass('is-active');
+ return visibleCount;
+ }
+
  $('.assigned-products-container').each(function() {
  aoamUpdateProductPicker($(this));
  });
 
  $('.moderator-products-select').on('change', function() {
- aoamUpdateProductPicker($(this).closest('.assigned-products-container'));
+ var $container = $(this).closest('.assigned-products-container');
+ aoamUpdateProductPicker($container);
+ aoamFilterProductOptions($container);
  });
 
  $('.aoam-product-search').on('input', function() {
- var term = $(this).val().toLowerCase();
  var $container = $(this).closest('.assigned-products-container');
  aoamOpenProductPicker($container);
- $container.find('.aoam-product-option').each(function() {
- var optionText = $(this).text().toLowerCase();
- $(this).toggle(!term || optionText.indexOf(term) !== -1 || $(this).hasClass('is-selected'));
+ aoamFilterProductOptions($container);
  });
+
+ $('.aoam-product-search').on('keydown', function(e) {
+ var $container = $(this).closest('.assigned-products-container');
+ var $visibleOptions = $container.find('.aoam-product-option:visible');
+ var $active = $visibleOptions.filter('.is-active');
+
+ if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+ e.preventDefault();
+ if (!$visibleOptions.length) {
+ return;
+ }
+ var index = $visibleOptions.index($active);
+ index = e.key === 'ArrowDown' ? index + 1 : index - 1;
+ if (index < 0) {
+ index = $visibleOptions.length - 1;
+ }
+ if (index >= $visibleOptions.length) {
+ index = 0;
+ }
+ $visibleOptions.removeClass('is-active').eq(index).addClass('is-active').get(0).scrollIntoView({ block: 'nearest' });
+ }
+
+ if (e.key === 'Enter') {
+ e.preventDefault();
+ ($active.length ? $active : $visibleOptions.first()).trigger('click');
+ }
+
+ if (e.key === 'Escape') {
+ $container.find('.aoam-product-picker').removeClass('is-open');
+ }
  });
 
  $('.aoam-product-search, .aoam-product-selected-count, .aoam-selected-products').on('focus click', function() {
@@ -3406,6 +3457,8 @@ function moderator_product_assignments_page() {
 
  option.selected = !option.selected;
  $select.trigger('change');
+ $container.find('.aoam-product-search').val('').focus();
+ aoamFilterProductOptions($container);
  });
 
  $(document).on('click', function(e) {
@@ -3520,9 +3573,17 @@ function moderator_product_assignments_page() {
  .aoam-product-option:hover {
  background: #f0f6ff;
  }
+ .aoam-product-option.is-active {
+ outline: 2px solid #3858e9;
+ outline-offset: -2px;
+ background: #f0f6ff;
+ }
  .aoam-product-option.is-selected {
  background: #2271b1;
  color: #fff;
+ }
+ .aoam-product-option.is-selected.is-active {
+ background: #135e96;
  }
  .aoam-product-option .dashicons {
  display: none;
@@ -3533,6 +3594,13 @@ function moderator_product_assignments_page() {
  }
  .aoam-product-option.is-selected .dashicons {
  display: inline-block;
+ }
+ .aoam-product-no-results {
+ display: none;
+ padding: 10px;
+ color: #646970;
+ font-weight: 700;
+ text-align: center;
  }
  .aoam-selected-products {
  display: flex;
