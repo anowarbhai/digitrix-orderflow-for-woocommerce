@@ -8906,6 +8906,7 @@ function moderator_reassign_orders_page() {
  
  $active_users = array();
  $inactive_users = array();
+ $all_reassign_users = array();
  
  foreach ($all_users as $user) {
  $status = get_user_meta($user->ID, 'moderator_status', true);
@@ -8921,6 +8922,9 @@ function moderator_reassign_orders_page() {
  } else {
  $active_users[] = $user_data;
  }
+ 
+ $user_data['status'] = ($status === 'inactive') ? 'inactive' : 'active';
+ $all_reassign_users[] = $user_data;
  }
  
  // Get shift settings
@@ -8950,7 +8954,7 @@ function moderator_reassign_orders_page() {
 
  <div class="card">
  <h2> Bulk Order Reassignment</h2>
- <p>Transfer orders from inactive users to active users.</p>
+ <p>Transfer orders from selected source users to active target users.</p>
  
  <!-- Hidden form for actual submission -->
  <form method="post" id="reassign-main-form" style="display: none;">
@@ -8962,43 +8966,52 @@ function moderator_reassign_orders_page() {
  <input type="submit" name="reassign_orders" id="reassign_orders_submit">
  </form>
  
- <!-- Step 1: Select Inactive User -->
+ <!-- Step 1: Select Source Users -->
  <div class="reassign-step" id="step-1">
- <h3><span class="step-number">1</span> Select Inactive User</h3>
+ <h3><span class="step-number">1</span> Select Source Users</h3>
+ <p>Choose one or more users whose orders should be reassigned. Active and inactive users can be selected here.</p>
  
- <?php if (empty($inactive_users)): ?>
+ <?php if (empty($all_reassign_users)): ?>
  <div class="notice notice-warning">
- <p>No inactive users found. Deactivate users first from "Sequence & Status" page.</p>
+ <p>No users found for reassignment.</p>
  <a href="<?php echo admin_url('admin.php?page=moderator-sequence-status'); ?>" class="button">
  Go to Sequence & Status
  </a>
  </div>
  <?php else: ?>
  <div class="user-grid">
- <?php foreach ($inactive_users as $user): 
+ <?php foreach ($all_reassign_users as $user): 
  $order_count = count_user_orders($user['ID']);
  $status_counts = get_user_order_status_counts($user['ID']);
  $user_initial = strtoupper(substr($user['display_name'], 0, 1));
+ $is_inactive = ($user['status'] === 'inactive');
  ?>
- <div class="user-card inactive-user-card" data-user-id="<?php echo esc_attr($user['ID']); ?>">
+ <div class="user-card source-user-card" data-user-id="<?php echo esc_attr($user['ID']); ?>">
  <div class="user-card-header">
- <div class="user-avatar" style="background: #dc3232;position: relative;border-radius: 50px;overflow: hidden;">
+ <div class="user-avatar" style="background: <?php echo $is_inactive ? '#dc3232' : '#46b450'; ?>;position: relative;border-radius: 50px;overflow: hidden;">
  <span class="aoam-user-initial"><?php echo esc_html($user_initial); ?></span>
- <span class="inactiveuser" style="position: absolute; right: 3px;top: 6px;font-size: 12px;"></span>
  </div>
  <div class="user-info">
  <h4><?php echo esc_html($user['display_name']); ?></h4>
  <p class="user-meta">User <?php echo $user['sequence']; ?> <?php echo esc_html($user['user_email']); ?></p>
+ <span class="aoam-user-status <?php echo $is_inactive ? 'is-inactive' : 'is-active'; ?>"><?php echo $is_inactive ? 'Inactive' : 'Active'; ?></span>
  </div>
  </div>
  
- <button type="button" class="button button-primary select-inactive-btn" 
- data-user-id="<?php echo esc_attr($user['ID']); ?>"
- data-user-name="<?php echo esc_attr($user['display_name']); ?>">
- Select This Inactive User
- </button>
+ <label class="checkbox-container">
+ <input type="checkbox" class="source-user-checkbox" value="<?php echo esc_attr($user['ID']); ?>">
+ <span class="checkmark"></span>
+ Select Source User
+ </label>
  </div>
  <?php endforeach; ?>
+ </div>
+ <div style="margin-top: 20px;">
+ <button type="button" class="button" id="select-all-source-btn">Select All</button>
+ <button type="button" class="button" id="deselect-all-source-btn">Deselect All</button>
+ </div>
+ <div style="margin-top: 30px; text-align: right;">
+ <button type="button" class="button button-primary" onclick="goToStep(2)">Next </button>
  </div>
  <?php endif; ?>
  </div>
@@ -9006,7 +9019,7 @@ function moderator_reassign_orders_page() {
  <!-- Step 2: Select Active Users -->
  <div class="reassign-step" id="step-2" style="display: none;">
  <h3><span class="step-number">2</span> Select Active Users</h3>
- <p>Choose who will receive the reassigned orders:</p>
+ <p>Choose active users who will receive the reassigned orders:</p>
  
  <div class="user-grid">
  <?php foreach ($active_users as $user): ?>
@@ -9168,6 +9181,26 @@ function moderator_reassign_orders_page() {
  .user-card.selected {
  border-color: #46b450;
  background: #f8fff8;
+ }
+ 
+ .aoam-user-status {
+ display: inline-flex;
+ align-items: center;
+ margin-top: 6px;
+ padding: 2px 8px;
+ border-radius: 999px;
+ font-size: 11px;
+ font-weight: 700;
+ }
+ 
+ .aoam-user-status.is-active {
+ background: #edfaef;
+ color: #1d7f2d;
+ }
+ 
+ .aoam-user-status.is-inactive {
+ background: #fdecec;
+ color: #b42318;
  }
  
  .user-card-header {
@@ -9341,7 +9374,7 @@ function moderator_reassign_orders_page() {
  <script>
  // Global variables to store selections
  var reassignData = {
- inactive_user: null,
+ source_users: [],
  active_users: [],
  order_statuses: [],
  selected_shifts: []
@@ -9350,19 +9383,18 @@ function moderator_reassign_orders_page() {
 jQuery(document).ready(function($) {
  // Use $ inside this function only
  
- // Step 1: Select inactive user
- $('.select-inactive-btn').click(function() {
- var userId = $(this).data('user-id');
- var userName = $(this).data('user-name');
+ // Step 1: Source users selection
+ $('.source-user-checkbox').change(function() {
+ updateSourceUsersList();
+ $(this).closest('.source-user-card').toggleClass('selected', $(this).is(':checked'));
+ });
  
- reassignData.inactive_user = userId;
+ $('#select-all-source-btn').click(function() {
+ $('.source-user-checkbox').prop('checked', true).trigger('change');
+ });
  
- // Update UI
- $('.inactive-user-card').removeClass('selected');
- $(this).closest('.inactive-user-card').addClass('selected');
- 
- // Go to next step
- goToStep(2);
+ $('#deselect-all-source-btn').click(function() {
+ $('.source-user-checkbox').prop('checked', false).trigger('change');
  });
  
  // Step 2: Active users selection
@@ -9398,6 +9430,16 @@ jQuery(document).ready(function($) {
 });
 
 function goToStep(stepNumber) {
+ if (stepNumber === 2 && reassignData.source_users.length === 0) {
+ alert('Please select at least one source user.');
+ return;
+ }
+ 
+ if (stepNumber === 3 && reassignData.active_users.length === 0) {
+ alert('Please select at least one active target user.');
+ return;
+ }
+ 
  // Use jQuery instead of $
  jQuery('.reassign-step').hide();
  jQuery('#step-' + stepNumber).show();
@@ -9406,6 +9448,13 @@ function goToStep(stepNumber) {
  if (stepNumber === 4) {
  loadPreview();
  }
+}
+
+function updateSourceUsersList() {
+ reassignData.source_users = [];
+ jQuery('.source-user-checkbox:checked').each(function() {
+ reassignData.source_users.push(jQuery(this).val());
+ });
 }
 
 function updateActiveUsersList() {
@@ -9423,7 +9472,7 @@ function updateStatusList() {
 }
 
 function loadPreview() {
- if (!reassignData.inactive_user || reassignData.active_users.length === 0 || reassignData.order_statuses.length === 0) {
+ if (reassignData.source_users.length === 0 || reassignData.active_users.length === 0 || reassignData.order_statuses.length === 0) {
  jQuery('#preview-container').html('<div style="text-align: center; padding: 40px; color: #cc1818;"><p>Please complete all previous steps.</p></div>');
  return;
  }
@@ -9435,7 +9484,7 @@ function loadPreview() {
  type: 'POST',
  data: {
  action: 'get_reassign_preview_final',
- inactive_user: reassignData.inactive_user,
+ source_users: reassignData.source_users,
  active_users: reassignData.active_users,
  order_statuses: reassignData.order_statuses,
  nonce: '<?php echo wp_create_nonce('reassign_preview_final'); ?>'
@@ -9464,7 +9513,7 @@ function submitReassignment() {
  
  // Prepare data for form submission
  jQuery('#inactive_user_data').val(JSON.stringify({
- id: reassignData.inactive_user,
+ source_users: reassignData.source_users,
  users: reassignData.active_users,
  statuses: reassignData.order_statuses,
  shifts: reassignData.selected_shifts,
@@ -9562,12 +9611,32 @@ function get_reassign_preview_final_ajax() {
  wp_send_json_error('Security check failed');
  }
  
- $inactive_user_id = intval($_POST['inactive_user']);
+ $source_users = array();
+ if (isset($_POST['source_users'])) {
+ $source_users = array_map('intval', (array) $_POST['source_users']);
+ } elseif (isset($_POST['inactive_user'])) {
+ $source_users = array(intval($_POST['inactive_user']));
+ }
+ $source_users = array_values(array_filter(array_unique($source_users)));
  $active_users = isset($_POST['active_users']) ? array_map('intval', $_POST['active_users']) : array();
+ $active_users = array_values(array_filter(array_unique($active_users), function($user_id) {
+ return get_user_meta($user_id, 'moderator_status', true) !== 'inactive';
+ }));
  $order_statuses = isset($_POST['order_statuses']) ? array_map('sanitize_text_field', $_POST['order_statuses']) : array();
  
+ if (empty($source_users) || empty($active_users) || empty($order_statuses)) {
+ wp_send_json_error('Please select source users, active target users, and order statuses.');
+ }
+ 
  // Get orders
- $orders = get_orders_for_reassignment_final($inactive_user_id, $order_statuses);
+ $orders = get_orders_for_reassignment_final($source_users, $order_statuses);
+ $source_names = array();
+ foreach ($source_users as $source_user_id) {
+ $source_user = get_userdata($source_user_id);
+ if ($source_user) {
+ $source_names[] = $source_user->display_name;
+ }
+ }
  
  if (empty($orders)) {
  $html = '<div style="text-align: center; padding: 40px;">';
@@ -9576,9 +9645,8 @@ function get_reassign_preview_final_ajax() {
  $html .= '<p>No orders match the selected criteria.</p>';
  
  // Debug info
- $inactive_user = get_userdata($inactive_user_id);
  $html .= '<div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-top: 20px; text-align: left;">';
- $html .= '<p><strong>User:</strong> ' . esc_html($inactive_user->display_name) . '</p>';
+ $html .= '<p><strong>Source Users:</strong> ' . esc_html(implode(', ', $source_names)) . '</p>';
  $html .= '<p><strong>Statuses:</strong> ' . esc_html(implode(', ', $order_statuses)) . '</p>';
  $html .= '</div>';
  
@@ -9589,8 +9657,6 @@ function get_reassign_preview_final_ajax() {
  }
  
  // Generate preview
- $inactive_user = get_userdata($inactive_user_id);
- 
  $html = '<div class="final-preview">';
  
  // Summary
@@ -9598,6 +9664,7 @@ function get_reassign_preview_final_ajax() {
  $html .= '<h3 style="color: white; margin-top: 0;"> Reassignment Summary</h3>';
  $html .= '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">';
  $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($orders) . '</div><div>Total Orders</div></div>';
+ $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($source_users) . '</div><div>Source Users</div></div>';
  $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($active_users) . '</div><div>Active Users</div></div>';
  $html .= '<div><div style="font-size: 32px; font-weight: bold;">' . count($order_statuses) . '</div><div>Statuses</div></div>';
  $html .= '</div>';
@@ -9668,45 +9735,50 @@ function get_reassign_preview_final_ajax() {
 }
 
 // Function to get orders
-function get_orders_for_reassignment_final($user_id, $statuses) {
+function get_orders_for_reassignment_final($user_ids, $statuses) {
  // Method 1: Direct query with all possible meta keys
  global $wpdb;
  
+ $user_ids = array_values(array_filter(array_unique(array_map('intval', (array) $user_ids))));
+ $statuses = array_values(array_filter(array_map('sanitize_text_field', (array) $statuses)));
+ 
+ if (empty($user_ids) || empty($statuses)) {
+ return array();
+ }
+ 
  $meta_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ $user_placeholders = implode(',', array_fill(0, count($user_ids), '%d'));
+ $found_order_ids = array();
  
  foreach ($meta_keys as $key) {
  // Get order IDs with this meta key
+ $query_args = array_merge(array($key), $user_ids);
  $order_ids = $wpdb->get_col($wpdb->prepare("
  SELECT post_id 
  FROM {$wpdb->postmeta} 
  WHERE meta_key = %s 
- AND meta_value = %d
- ", $key, $user_id));
+ AND meta_value IN ($user_placeholders)
+ ", $query_args));
  
  if (!empty($order_ids)) {
- // Filter by status
- $filtered_ids = array();
- foreach ($order_ids as $order_id) {
- $order = wc_get_order($order_id);
- if ($order && in_array($order->get_status(), $statuses)) {
- $filtered_ids[] = $order_id;
+ $found_order_ids = array_merge($found_order_ids, array_map('intval', $order_ids));
  }
  }
  
- // Convert to WC_Order objects
+ $found_order_ids = array_values(array_unique($found_order_ids));
+ if (empty($found_order_ids)) {
+ return array();
+ }
+ 
  $orders = array();
- foreach ($filtered_ids as $order_id) {
+ foreach ($found_order_ids as $order_id) {
  $order = wc_get_order($order_id);
- if ($order) {
+ if ($order && in_array($order->get_status(), $statuses, true)) {
  $orders[] = $order;
  }
  }
  
  return $orders;
- }
- }
- 
- return array();
 }
 
 // Form submission handler
@@ -9736,15 +9808,20 @@ function process_reassignment_form() {
  );
  }
  
- $inactive_user_id = isset($data['id']) ? intval($data['id']) : 0;
+ if (isset($data['source_users'])) {
+ $source_users = array_map('intval', (array) $data['source_users']);
+ } else {
+ $source_users = isset($data['id']) ? array(intval($data['id'])) : array();
+ }
+ $source_users = array_values(array_filter(array_unique($source_users)));
  $active_users = isset($data['users']) ? array_map('intval', $data['users']) : array();
  $order_statuses = isset($data['statuses']) ? array_map('sanitize_text_field', $data['statuses']) : array();
  
  // Validation
- if (!$inactive_user_id) {
+ if (empty($source_users)) {
  return array(
  'success' => false,
- 'message' => 'No inactive user selected.'
+ 'message' => 'No source users selected.'
  );
  }
  
@@ -9752,6 +9829,17 @@ function process_reassignment_form() {
  return array(
  'success' => false,
  'message' => 'No active users selected.'
+ );
+ }
+ 
+ $active_users = array_values(array_filter(array_unique(array_map('intval', $active_users)), function($user_id) {
+ return get_user_meta($user_id, 'moderator_status', true) !== 'inactive';
+ }));
+ 
+ if (empty($active_users)) {
+ return array(
+ 'success' => false,
+ 'message' => 'Target users must be active. Please select active users only.'
  );
  }
  
@@ -9763,30 +9851,40 @@ function process_reassignment_form() {
  }
  
  // Get orders
- $orders = get_orders_for_reassignment_final($inactive_user_id, $order_statuses);
+ $orders = get_orders_for_reassignment_final($source_users, $order_statuses);
  
  if (empty($orders)) {
  return array(
  'success' => false,
  'message' => 'No orders found to reassign with the selected criteria.',
- 'debug' => "User ID: $inactive_user_id\nStatuses: " . implode(', ', $order_statuses) . "\nTotal orders in DB: " . count_user_orders($inactive_user_id)
+ 'debug' => "Source user IDs: " . implode(', ', $source_users) . "\nStatuses: " . implode(', ', $order_statuses)
  );
  }
  
  // Process reassignment
- $result = process_bulk_reassignment($inactive_user_id, $active_users, $order_statuses, $orders);
+ $result = process_bulk_reassignment($source_users, $active_users, $order_statuses, $orders);
  
  return $result;
 }
 
 // Bulk reassignment processor
-function process_bulk_reassignment($inactive_user_id, $active_users, $order_statuses, $orders) {
- $inactive_user = get_userdata($inactive_user_id);
+function process_bulk_reassignment($source_user_ids, $active_users, $order_statuses, $orders) {
+ $source_user_ids = array_values(array_filter(array_unique(array_map('intval', (array) $source_user_ids))));
+ $active_users = array_values(array_filter(array_unique(array_map('intval', (array) $active_users)), function($user_id) {
+ return get_user_meta($user_id, 'moderator_status', true) !== 'inactive';
+ }));
  
- if (!$inactive_user) {
+ if (empty($source_user_ids)) {
  return array(
  'success' => false,
- 'message' => 'Inactive user not found.'
+ 'message' => 'Source users not found.'
+ );
+ }
+ 
+ if (empty($active_users)) {
+ return array(
+ 'success' => false,
+ 'message' => 'No active target users found.'
  );
  }
  
@@ -9810,7 +9908,9 @@ function process_bulk_reassignment($inactive_user_id, $active_users, $order_stat
  
  if ($new_user) {
  // Find the correct meta key
- $meta_key = find_assignment_meta_key($order->get_id(), $inactive_user_id);
+ $assignment_info = find_assignment_meta_key_for_users($order->get_id(), $source_user_ids);
+ $meta_key = $assignment_info['meta_key'];
+ $old_user = $assignment_info['user_id'] ? get_userdata($assignment_info['user_id']) : null;
  
  if ($meta_key) {
  // Update assignment
@@ -9826,7 +9926,7 @@ function process_bulk_reassignment($inactive_user_id, $active_users, $order_stat
  // Add order note
  $order_note = sprintf(
  ' Order reassigned from %s to %s via bulk reassignment tool.',
- $inactive_user->display_name,
+ $old_user ? $old_user->display_name : 'selected source user',
  $new_user->display_name
  );
  
@@ -9847,7 +9947,7 @@ function process_bulk_reassignment($inactive_user_id, $active_users, $order_stat
  
  // Prepare response
  if ($reassigned > 0) {
- $message = " Successfully reassigned $reassigned order(s) from {$inactive_user->display_name}.\n\n";
+ $message = " Successfully reassigned $reassigned order(s) from selected source users.\n\n";
  
  $details = "Distribution:\n";
  foreach ($distribution as $user_id => $count) {
@@ -9887,4 +9987,24 @@ function find_assignment_meta_key($order_id, $user_id) {
  }
  
  return '_assigned_moderator_id'; // Default
+}
+
+function find_assignment_meta_key_for_users($order_id, $user_ids) {
+ $possible_keys = array('_assigned_moderator_id', '_assigned_moderator', '_moderator_id', '_assigned_to');
+ $user_ids = array_map('intval', (array) $user_ids);
+ 
+ foreach ($possible_keys as $key) {
+ $assigned_user = intval(get_post_meta($order_id, $key, true));
+ if (in_array($assigned_user, $user_ids, true)) {
+ return array(
+ 'meta_key' => $key,
+ 'user_id' => $assigned_user
+ );
+ }
+ }
+ 
+ return array(
+ 'meta_key' => '_assigned_moderator_id',
+ 'user_id' => 0
+ );
 }
