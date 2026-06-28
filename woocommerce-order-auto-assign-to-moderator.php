@@ -1,12 +1,12 @@
 <?php
 /**
  * Plugin Name: WooCommerce Order Auto Assign To Moderator
- * Plugin URI: https://shirinshoes.com/
+ * Plugin URI: https://digitrixlabs.io
  * Description: Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing.
  * Version: 1.2.0
- * Author: Anowar Hossain
- * Author URI: https://shirinshoes.com/
- * Company: Shirin Fashion
+ * Author: Digitrix Labs
+ * Author URI: https://digitrixlabs.io
+ * Company: Digitrix Labs
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: auto-order-assign-moderator

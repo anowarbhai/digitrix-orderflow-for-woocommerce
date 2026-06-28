@@ -1,5 +1,5 @@
 === WooCommerce Order Auto Assign To Moderator ===
-Contributors: anowarbhai
+Contributors: digitrixlabs
 Tags: woocommerce, orders, order management, workflow, rest api
 Requires at least: 5.8
 Tested up to: 7.0
