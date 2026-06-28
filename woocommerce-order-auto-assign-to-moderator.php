@@ -506,13 +506,12 @@ function aoam_remote_order_import_page() {
  <p><label><input type="checkbox" name="enabled" value="1" <?php checked(($settings['enabled'] ?? 'yes'), 'yes'); ?>> Enable automatic import every 5 minutes</label></p>
  <?php
  $sources = $settings['sources'];
- $target_source_rows = max(5, count($sources) + 1);
- for ($i = count($sources); $i < $target_source_rows; $i++) {
+ if (empty($sources)) {
  $sources[] = array('site_url' => '', 'consumer_key' => '', 'consumer_secret' => '', 'statuses' => 'processing,pending,on-hold', 'per_page' => 20, 'enabled' => 'yes');
  }
  ?>
  <div style="overflow-x:auto;">
- <table class="widefat striped">
+ <table class="widefat striped" id="aoam-remote-sources-table">
  <thead>
  <tr>
  <th>On</th>
@@ -521,6 +520,7 @@ function aoam_remote_order_import_page() {
  <th>Consumer Secret</th>
  <th>Statuses</th>
  <th>Limit</th>
+ <th>Action</th>
  </tr>
  </thead>
  <tbody>
@@ -532,13 +532,17 @@ function aoam_remote_order_import_page() {
  <td><input type="password" name="sources[<?php echo esc_attr($index); ?>][consumer_secret]" value="<?php echo esc_attr($source['consumer_secret'] ?? ''); ?>" style="width: 180px;"></td>
  <td><input type="text" name="sources[<?php echo esc_attr($index); ?>][statuses]" value="<?php echo esc_attr($source['statuses'] ?? 'processing,pending,on-hold'); ?>" style="width: 180px;"></td>
  <td><input type="number" min="1" max="100" name="sources[<?php echo esc_attr($index); ?>][per_page]" value="<?php echo esc_attr($source['per_page'] ?? 20); ?>" style="width: 70px;"></td>
+ <td><button type="button" class="button aoam-remove-source-row">Remove</button></td>
  </tr>
  <?php endforeach; ?>
  </tbody>
  </table>
  </div>
- <p class="description">Add one source per row. Leave unused rows empty. Imported orders are duplicate-protected per source.</p>
- <p><button type="submit" name="aoam_save_remote_import" class="button button-primary">Save Settings</button></p>
+ <p class="description">Add one source per row. Imported orders are duplicate-protected per source.</p>
+ <p>
+ <button type="button" id="aoam-add-source-row" class="button">Add New Source</button>
+ <button type="submit" name="aoam_save_remote_import" class="button button-primary">Save Settings</button>
+ </p>
  </form>
  </div>
 
@@ -551,6 +555,41 @@ function aoam_remote_order_import_page() {
  </button>
  </div>
  </div>
+ <script>
+ jQuery(function($) {
+ var sourceIndex = <?php echo esc_js(count($sources)); ?>;
+ var defaultStatuses = 'processing,pending,on-hold';
+ var rowTemplate = function(index) {
+ return '<tr>' +
+ '<td><input type="checkbox" name="sources[' + index + '][enabled]" value="1" checked></td>' +
+ '<td><input type="url" name="sources[' + index + '][site_url]" value="" placeholder="https://example.com" style="width: 220px;"></td>' +
+ '<td><input type="text" name="sources[' + index + '][consumer_key]" value="" style="width: 180px;"></td>' +
+ '<td><input type="password" name="sources[' + index + '][consumer_secret]" value="" style="width: 180px;"></td>' +
+ '<td><input type="text" name="sources[' + index + '][statuses]" value="' + defaultStatuses + '" style="width: 180px;"></td>' +
+ '<td><input type="number" min="1" max="100" name="sources[' + index + '][per_page]" value="20" style="width: 70px;"></td>' +
+ '<td><button type="button" class="button aoam-remove-source-row">Remove</button></td>' +
+ '</tr>';
+ };
+ 
+ $('#aoam-add-source-row').on('click', function() {
+ $('#aoam-remote-sources-table tbody').append(rowTemplate(sourceIndex));
+ sourceIndex++;
+ });
+ 
+ $(document).on('click', '.aoam-remove-source-row', function() {
+ var $tbody = $('#aoam-remote-sources-table tbody');
+ if ($tbody.find('tr').length <= 1) {
+ var $row = $(this).closest('tr');
+ $row.find('input[type="url"], input[type="text"], input[type="password"]').val('');
+ $row.find('input[name$="[statuses]"]').val(defaultStatuses);
+ $row.find('input[type="number"]').val('20');
+ $row.find('input[type="checkbox"]').prop('checked', true);
+ return;
+ }
+ $(this).closest('tr').remove();
+ });
+ });
+ </script>
  <?php
 }
 
