@@ -43,7 +43,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 
 ```text
 digitrix-orderflow-for-woocommerce/
-|-- woocommerce-order-auto-assign-to-moderator.php
+|-- digitrix-orderflow-for-woocommerce.php
 |-- README.md
 |-- readme.txt
 |-- uninstall.php
@@ -127,7 +127,7 @@ Then clear any page cache and refresh the WordPress admin page.
 - Run a syntax check before deploy:
 
 ```bash
-php -l woocommerce-order-auto-assign-to-moderator.php
+php -l digitrix-orderflow-for-woocommerce.php
 ```
 
 ## Changelog
