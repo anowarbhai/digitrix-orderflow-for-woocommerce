@@ -1,11 +1,12 @@
-# WooCommerce Order Auto Assign To Moderator
+# Digitrix OrderFlow for WooCommerce
 
 Professional WooCommerce operations plugin for assigning orders to moderators, importing orders from remote WooCommerce stores, and giving moderators a focused order-processing interface.
 
 ## Plugin Metadata
 
-- Plugin name: WooCommerce Order Auto Assign To Moderator
-- Text domain: `auto-order-assign-moderator`
+- Plugin name: Digitrix OrderFlow for WooCommerce
+- Text domain: `digitrix-orderflow-for-woocommerce`
+- WordPress.org slug: `digitrix-orderflow-for-woocommerce`
 - Requires WordPress: 5.8+
 - Requires PHP: 7.4+
 - Requires WooCommerce: 6.0+
@@ -41,7 +42,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 ## File Structure
 
 ```text
-woocommerce-order-auto-assign-to-moderator/
+digitrix-orderflow-for-woocommerce/
 |-- woocommerce-order-auto-assign-to-moderator.php
 |-- README.md
 |-- readme.txt
@@ -112,7 +113,7 @@ Order display dates are formatted in `Asia/Dhaka`.
 On the live server:
 
 ```bash
-cd /path/to/wp-content/plugins/woocommerce-order-auto-assign-to-moderator
+cd /path/to/wp-content/plugins/digitrix-orderflow-for-woocommerce
 git pull origin main
 ```
 

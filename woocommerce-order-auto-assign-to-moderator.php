@@ -1,15 +1,15 @@
 <?php
 /**
- * Plugin Name: WooCommerce Order Auto Assign To Moderator
+ * Plugin Name: Digitrix OrderFlow for WooCommerce
  * Plugin URI: https://digitrixlabs.io
- * Description: Automatically assign WooCommerce orders to moderators based on product specialization and round-robin sequencing.
+ * Description: Manage WooCommerce order assignment, moderator workflows, and remote order imports for operations teams.
  * Version: 1.2.0
  * Author: Digitrix Labs
  * Author URI: https://digitrixlabs.io
  * Company: Digitrix Labs
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: auto-order-assign-moderator
+ * Text Domain: digitrix-orderflow-for-woocommerce
  * Requires at least: 5.8
  * Requires PHP: 7.4
  * WC requires at least: 6.0
@@ -36,7 +36,7 @@ if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get
 function aoam_woocommerce_missing_notice() {
  ?>
  <div class="error">
- <p><?php _e('WooCommerce Order Auto Assign To Moderator requires WooCommerce to be installed and active.', 'auto-order-assign-moderator'); ?></p>
+ <p><?php esc_html_e('Digitrix OrderFlow for WooCommerce requires WooCommerce to be installed and active.', 'digitrix-orderflow-for-woocommerce'); ?></p>
  </div>
  <?php
 }
@@ -98,8 +98,8 @@ function aoam_enqueue_admin_assets() {
 
 add_filter('plugin_action_links_' . AOAM_PLUGIN_BASENAME, 'aoam_plugin_action_links');
 function aoam_plugin_action_links($links) {
- $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-settings')) . '">' . esc_html__('Dashboard', 'auto-order-assign-moderator') . '</a>';
- $docs_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-plugin-settings')) . '">' . esc_html__('Settings', 'auto-order-assign-moderator') . '</a>';
+ $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-settings')) . '">' . esc_html__('Dashboard', 'digitrix-orderflow-for-woocommerce') . '</a>';
+ $docs_link = '<a href="' . esc_url(admin_url('admin.php?page=moderator-plugin-settings')) . '">' . esc_html__('Settings', 'digitrix-orderflow-for-woocommerce') . '</a>';
  array_unshift($links, $settings_link, $docs_link);
  return $links;
 }
@@ -148,7 +148,7 @@ function aoam_update_shift_settings($shifts) {
 // Plugin Settings Page with Shift Settings
 function aoam_plugin_settings_page() {
  if (!current_user_can('manage_options')) {
- wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ wp_die(esc_html__('You do not have permission to access this page.', 'digitrix-orderflow-for-woocommerce'));
  }
  
  // Handle form submissions
@@ -2355,7 +2355,7 @@ function moderator_settings_main_page() {
 
 function moderator_sequence_status_page() {
  if (!current_user_can('manage_options')) {
- wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ wp_die(esc_html__('You do not have permission to access this page.', 'digitrix-orderflow-for-woocommerce'));
  }
  
  // Get assigned roles dynamically
@@ -3107,7 +3107,7 @@ function moderator_sequence_status_page() {
 // remain mostly the same as your original code, with minor adjustments for shift timing display
 function moderator_product_assignments_page() {
  if (!current_user_can('manage_options')) {
- wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ wp_die(esc_html__('You do not have permission to access this page.', 'digitrix-orderflow-for-woocommerce'));
  }
  
  // Get assigned roles dynamically
@@ -9115,7 +9115,7 @@ function moderator_welcome_panel() {
 
 function moderator_reassign_orders_page() {
  if (!current_user_can('manage_options')) {
- wp_die(esc_html__('You do not have permission to access this page.', 'auto-order-assign-moderator'));
+ wp_die(esc_html__('You do not have permission to access this page.', 'digitrix-orderflow-for-woocommerce'));
  }
  
  // Get assigned roles

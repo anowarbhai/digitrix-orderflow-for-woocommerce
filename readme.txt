@@ -1,4 +1,4 @@
-=== WooCommerce Order Auto Assign To Moderator ===
+=== Digitrix OrderFlow for WooCommerce ===
 Contributors: digitrixlabs
 Tags: woocommerce, orders, order management, workflow, rest api
 Requires at least: 5.8
@@ -10,11 +10,11 @@ Stable tag: 1.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Assign WooCommerce orders to moderators, manage order workflows, and import remote WooCommerce orders through the REST API.
+Order assignment, moderator workflow, and remote WooCommerce order import for operations teams.
 
 == Description ==
 
-WooCommerce Order Auto Assign To Moderator helps store teams distribute WooCommerce orders to moderators based on status, product assignment, user sequence, and availability.
+Digitrix OrderFlow for WooCommerce helps store teams distribute WooCommerce orders to moderators based on status, product assignment, user sequence, and availability.
 
 The plugin includes an admin order management area, a moderator-facing My Orders page, Recent Assignments reporting, remote WooCommerce REST API import, and status sync for imported orders.
 
