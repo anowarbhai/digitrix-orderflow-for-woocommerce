@@ -766,9 +766,15 @@ function aoam_remote_order_import_page() {
  });
  
  $(document).on('click', '.aoam-remove-source-row', function() {
+ var $row = $(this).closest('tr');
+ var sourceUrl = $row.find('input[name$="[site_url]"]').val() || 'this source';
+ var confirmMessage = 'Remove remote import source "' + sourceUrl + '"?\n\nThis source and its saved API credentials will be removed after you click Save Settings.';
+ if (!window.confirm(confirmMessage)) {
+ return;
+ }
+ 
  var $tbody = $('#aoam-remote-sources-table tbody');
  if ($tbody.find('tr').length <= 1) {
- var $row = $(this).closest('tr');
  $row.find('input[type="url"], input[type="text"], input[type="password"]').val('');
  $row.find('input[name$="[statuses]"]').val(defaultStatuses);
  $row.find('input[type="number"]').val('20');
