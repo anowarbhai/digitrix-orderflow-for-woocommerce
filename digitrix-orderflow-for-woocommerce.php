@@ -7792,7 +7792,12 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  margin-bottom: 7px;
  }
  .orders-filter-field select {
- background: #fff;
+ appearance: none;
+ background-color: #fff;
+ background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+ background-position: right 14px center;
+ background-repeat: no-repeat;
+ background-size: 16px 16px;
  border: 1px solid #cfd8e3;
  border-radius: 8px;
  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -7844,6 +7849,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  font-size: 13px;
  min-height: 40px;
  padding-left: 10px;
+ padding-right: 34px;
  }
  
  #phone_search_main {
