@@ -10,7 +10,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 - Requires WordPress: 5.8+
 - Requires PHP: 7.4+
 - Requires WooCommerce: 6.0+
-- Current version: 1.2.0
+- Current version: 1.0.0
 - License: GPLv2 or later
 
 ## Core Features
@@ -132,18 +132,11 @@ php -l digitrix-orderflow-for-woocommerce.php
 
 ## Changelog
 
-### 1.2.0
+### 1.0.0
 
-- Added centralized plugin constants and page-specific asset loading.
-- Added WordPress.org `readme.txt`.
-- Removed external CDN usage.
-- Added page-specific CSS/JS asset files for Recent Assignments and Moderator Orders.
-- Added plugin action links and uninstall guard.
-
-### 1.1.x
-
+- Initial repository-ready release.
+- Added moderator order assignment and product assignment controls.
+- Added Recent Assignments AJAX filters and analytics.
+- Added Moderator Orders mobile card workflow.
 - Added remote WooCommerce REST API import and status sync.
-- Added AJAX Recent Assignments and Moderator Orders workflows.
-- Added mobile card view for moderator orders.
-- Added completion/cancellation flow analytics.
-- Added Dhaka timezone display.
+- Added WordPress.org `readme.txt`, page assets, plugin action links, and uninstall guard.

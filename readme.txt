@@ -6,7 +6,7 @@ Tested up to: 7.0
 Requires PHP: 7.4
 Requires Plugins: woocommerce
 WC requires at least: 6.0
-Stable tag: 1.2.0
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,20 +76,5 @@ Use WooCommerce REST API credentials with the minimum permissions required to re
 
 == Changelog ==
 
-= 1.2.0 =
-* Added page entry files for admin screens.
-* Added structured assets for admin, Recent Assignments, and Moderator Orders pages.
-* Added remote WooCommerce import improvements.
-* Added Recent Assignments flow analytics.
-* Improved Remote Import source management.
-* Improved role assignment settings design.
-* Improved bulk reassignment source and target user selection.
-* Improved repository readiness and documentation.
-
-= 1.1.0 =
-* Added remote WooCommerce REST API order import and status sync.
-* Added AJAX Recent Assignments and moderator order workflows.
-* Added mobile card view for moderator orders.
-
 = 1.0.0 =
-* Initial release.
+* Initial release with moderator order assignment, product assignments, Recent Assignments analytics, moderator My Orders workflow, remote WooCommerce REST API import, and status sync.

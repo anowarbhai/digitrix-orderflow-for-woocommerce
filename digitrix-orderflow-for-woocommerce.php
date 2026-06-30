@@ -3,7 +3,7 @@
  * Plugin Name: Digitrix OrderFlow for WooCommerce
  * Plugin URI: https://digitrixlabs.io
  * Description: Manage WooCommerce order assignment, moderator workflows, and remote order imports for operations teams.
- * Version: 1.2.0
+ * Version: 1.0.0
  * Author: Digitrix Labs
  * Author URI: https://digitrixlabs.io
  * Company: Digitrix Labs
@@ -21,7 +21,7 @@ if (!defined('ABSPATH')) {
  exit;
 }
 
-define('AOAM_VERSION', '1.2.0');
+define('AOAM_VERSION', '1.0.0');
 define('AOAM_PLUGIN_FILE', __FILE__);
 define('AOAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AOAM_PLUGIN_URL', plugin_dir_url(__FILE__));
