@@ -5898,6 +5898,168 @@ function filter_orders_for_moderators_by_assignment($query) {
  }
 }
 
+// Add an assigned moderator filter to the WooCommerce Orders list.
+add_action('woocommerce_order_list_table_restrict_manage_orders', 'aoam_render_hpos_order_moderator_filter', 20, 2);
+add_action('restrict_manage_posts', 'aoam_render_cpt_order_moderator_filter', 20, 2);
+add_action('pre_get_posts', 'aoam_apply_cpt_order_moderator_filter', 20);
+add_filter('woocommerce_shop_order_list_table_prepare_items_query_args', 'aoam_apply_hpos_order_moderator_filter');
+
+function aoam_get_order_moderator_filter_value() {
+ if (!isset($_GET['aoam_moderator_filter'])) {
+ return '';
+ }
+
+ $value = sanitize_text_field(wp_unslash($_GET['aoam_moderator_filter']));
+
+ if ($value === 'unassigned') {
+ return 'unassigned';
+ }
+
+ $user_id = absint($value);
+ return $user_id > 0 ? (string) $user_id : '';
+}
+
+function aoam_render_hpos_order_moderator_filter($order_type, $which = 'top') {
+ if ($order_type !== 'shop_order' || $which !== 'top') {
+ return;
+ }
+
+ aoam_render_order_moderator_filter_select();
+}
+
+function aoam_render_cpt_order_moderator_filter($post_type, $which = 'top') {
+ if ($post_type !== 'shop_order' || $which !== 'top') {
+ return;
+ }
+
+ aoam_render_order_moderator_filter_select();
+}
+
+function aoam_render_order_moderator_filter_select() {
+ $assigned_roles = aoam_get_assigned_roles();
+
+ if (empty($assigned_roles)) {
+ return;
+ }
+
+ $moderators = get_users(array(
+ 'role__in' => $assigned_roles,
+ 'orderby' => 'display_name',
+ 'order' => 'ASC',
+ 'fields' => array('ID', 'display_name', 'user_email'),
+ ));
+
+ $selected = aoam_get_order_moderator_filter_value();
+
+ echo '<select name="aoam_moderator_filter" id="aoam_moderator_filter" style="min-width: 210px;">';
+ echo '<option value="">' . esc_html__('All assigned moderators', 'digitrix-orderflow-for-woocommerce') . '</option>';
+ echo '<option value="unassigned"' . selected($selected, 'unassigned', false) . '>' . esc_html__('No Assign', 'digitrix-orderflow-for-woocommerce') . '</option>';
+
+ foreach ($moderators as $moderator) {
+ $label = $moderator->display_name;
+ if (!empty($moderator->user_email)) {
+ $label .= ' (' . $moderator->user_email . ')';
+ }
+
+ echo '<option value="' . esc_attr($moderator->ID) . '"' . selected($selected, (string) $moderator->ID, false) . '>' . esc_html($label) . '</option>';
+ }
+
+ echo '</select>';
+}
+
+function aoam_get_order_moderator_filter_meta_query($selected = null) {
+ if ($selected === null) {
+ $selected = aoam_get_order_moderator_filter_value();
+ }
+
+ if ($selected === '') {
+ return array();
+ }
+
+ if ($selected === 'unassigned') {
+ return array(
+ 'relation' => 'OR',
+ array(
+ 'key' => '_assigned_moderator_id',
+ 'compare' => 'NOT EXISTS',
+ ),
+ array(
+ 'key' => '_assigned_moderator_id',
+ 'value' => '',
+ 'compare' => '=',
+ ),
+ array(
+ 'key' => '_assigned_moderator_id',
+ 'value' => '0',
+ 'compare' => '=',
+ ),
+ );
+ }
+
+ return array(
+ 'key' => '_assigned_moderator_id',
+ 'value' => absint($selected),
+ 'compare' => '=',
+ 'type' => 'NUMERIC',
+ );
+}
+
+function aoam_append_order_meta_query($existing_meta_query, $new_clause) {
+ if (empty($new_clause)) {
+ return $existing_meta_query;
+ }
+
+ if (empty($existing_meta_query) || !is_array($existing_meta_query)) {
+ return array($new_clause);
+ }
+
+ if (isset($existing_meta_query['key'])) {
+ return array(
+ 'relation' => 'AND',
+ $existing_meta_query,
+ $new_clause,
+ );
+ }
+
+ $existing_meta_query[] = $new_clause;
+
+ if (!isset($existing_meta_query['relation'])) {
+ $existing_meta_query['relation'] = 'AND';
+ }
+
+ return $existing_meta_query;
+}
+
+function aoam_apply_cpt_order_moderator_filter($query) {
+ if (!is_admin() || !$query->is_main_query()) {
+ return;
+ }
+
+ $post_type = $query->get('post_type');
+ if ($post_type !== 'shop_order') {
+ return;
+ }
+
+ $filter_clause = aoam_get_order_moderator_filter_meta_query();
+ if (empty($filter_clause)) {
+ return;
+ }
+
+ $query->set('meta_query', aoam_append_order_meta_query($query->get('meta_query'), $filter_clause));
+}
+
+function aoam_apply_hpos_order_moderator_filter($query_args) {
+ $filter_clause = aoam_get_order_moderator_filter_meta_query();
+ if (empty($filter_clause)) {
+ return $query_args;
+ }
+
+ $existing_meta_query = isset($query_args['meta_query']) ? $query_args['meta_query'] : array();
+ $query_args['meta_query'] = aoam_append_order_meta_query($existing_meta_query, $filter_clause);
+
+ return $query_args;
+}
+
 // Display moderator sequence and status in orders list
 add_filter('manage_edit-shop_order_columns', 'add_moderator_sequence_column');
 
