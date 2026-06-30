@@ -6049,15 +6049,112 @@ function aoam_apply_cpt_order_moderator_filter($query) {
 }
 
 function aoam_apply_hpos_order_moderator_filter($query_args) {
- $filter_clause = aoam_get_order_moderator_filter_meta_query();
- if (empty($filter_clause)) {
+ $selected = aoam_get_order_moderator_filter_value();
+ if ($selected === '') {
  return $query_args;
  }
 
- $existing_meta_query = isset($query_args['meta_query']) ? $query_args['meta_query'] : array();
- $query_args['meta_query'] = aoam_append_order_meta_query($existing_meta_query, $filter_clause);
+ $order_ids = aoam_get_order_ids_for_moderator_filter($selected);
+
+ if (isset($query_args['id']) && is_array($query_args['id'])) {
+ $order_ids = array_values(array_intersect(array_map('absint', $query_args['id']), $order_ids));
+ }
+
+ $query_args['id'] = !empty($order_ids) ? $order_ids : array(0);
 
  return $query_args;
+}
+
+function aoam_get_order_ids_for_moderator_filter($selected) {
+ global $wpdb;
+
+ $postmeta_table = $wpdb->postmeta;
+ $posts_table = $wpdb->posts;
+ $hpos_orders_table = $wpdb->prefix . 'wc_orders';
+ $hpos_meta_table = $wpdb->prefix . 'wc_orders_meta';
+ $has_hpos_tables = aoam_database_table_exists($hpos_orders_table) && aoam_database_table_exists($hpos_meta_table);
+
+ if ($selected === 'unassigned') {
+ $legacy_ids = $wpdb->get_col(
+ "SELECT p.ID
+ FROM {$posts_table} p
+ WHERE p.post_type = 'shop_order'
+ AND NOT EXISTS (
+ SELECT 1
+ FROM {$postmeta_table} pm
+ WHERE pm.post_id = p.ID
+ AND pm.meta_key = '_assigned_moderator_id'
+ AND pm.meta_value NOT IN ('', '0')
+ )"
+ );
+
+ $hpos_ids = array();
+ if ($has_hpos_tables) {
+ $hpos_ids = $wpdb->get_col(
+ "SELECT o.id
+ FROM {$hpos_orders_table} o
+ WHERE o.type = 'shop_order'
+ AND NOT EXISTS (
+ SELECT 1
+ FROM {$hpos_meta_table} om
+ WHERE om.order_id = o.id
+ AND om.meta_key = '_assigned_moderator_id'
+ AND om.meta_value NOT IN ('', '0')
+ )
+ AND NOT EXISTS (
+ SELECT 1
+ FROM {$postmeta_table} pm
+ WHERE pm.post_id = o.id
+ AND pm.meta_key = '_assigned_moderator_id'
+ AND pm.meta_value NOT IN ('', '0')
+ )"
+ );
+ }
+
+ return aoam_unique_absint_ids(array_merge($legacy_ids, $hpos_ids));
+ }
+
+ $moderator_id = absint($selected);
+ if ($moderator_id < 1) {
+ return array();
+ }
+
+ $legacy_ids = $wpdb->get_col(
+ $wpdb->prepare(
+ "SELECT DISTINCT post_id
+ FROM {$postmeta_table}
+ WHERE meta_key = '_assigned_moderator_id'
+ AND meta_value = %d",
+ $moderator_id
+ )
+ );
+
+ $hpos_ids = array();
+ if ($has_hpos_tables) {
+ $hpos_ids = $wpdb->get_col(
+ $wpdb->prepare(
+ "SELECT DISTINCT order_id
+ FROM {$hpos_meta_table}
+ WHERE meta_key = '_assigned_moderator_id'
+ AND meta_value = %d",
+ $moderator_id
+ )
+ );
+ }
+
+ return aoam_unique_absint_ids(array_merge($legacy_ids, $hpos_ids));
+}
+
+function aoam_unique_absint_ids($ids) {
+ $ids = array_map('absint', is_array($ids) ? $ids : array());
+ $ids = array_filter($ids);
+ return array_values(array_unique($ids));
+}
+
+function aoam_database_table_exists($table_name) {
+ global $wpdb;
+
+ return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table_name)) === $table_name;
 }
 
 // Display moderator sequence and status in orders list
