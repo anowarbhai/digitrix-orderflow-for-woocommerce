@@ -5130,12 +5130,12 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  </span>
  </td>
  <td>
- <div class="order-actions">
- <a href="<?php echo esc_url(get_edit_post_link($order->get_id())); ?>" class="button button-small" target="_blank" title="Edit Order">
+ <div class="order-actions aoam-action-stack">
+ <a href="<?php echo esc_url(get_edit_post_link($order->get_id())); ?>" class="button button-small aoam-action-button aoam-action-edit" target="_blank" title="Edit Order">
  <span class="dashicons dashicons-edit"></span>
  Edit
  </a>
- <button type="button" class="button button-small view-order-details" data-order-id="<?php echo esc_attr($order->get_id()); ?>" title="View Details">
+ <button type="button" class="button button-small view-order-details aoam-action-button aoam-action-view" data-order-id="<?php echo esc_attr($order->get_id()); ?>" title="View Details">
  <span class="dashicons dashicons-visibility"></span>
  View
  </button>
@@ -5710,7 +5710,46 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  .order-actions {
  display: flex;
  flex-direction: column;
- gap: 5px;
+ gap: 6px;
+ min-width: 120px;
+ }
+ .aoam-action-stack {
+ align-items: stretch;
+ }
+ .aoam-action-button {
+ align-items: center !important;
+ background: #f8fbff !important;
+ border: 1px solid #c8d8ea !important;
+ border-radius: 7px !important;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+ color: #1f5f99 !important;
+ display: inline-flex !important;
+ gap: 6px !important;
+ justify-content: center !important;
+ min-height: 32px !important;
+ padding: 5px 10px !important;
+ text-decoration: none !important;
+ transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+ width: 100%;
+ }
+ .aoam-action-button:hover,
+ .aoam-action-button:focus {
+ background: #eef6ff !important;
+ border-color: #2271b1 !important;
+ box-shadow: 0 0 0 1px rgba(34, 113, 177, 0.12) !important;
+ color: #0b4f82 !important;
+ }
+ .aoam-action-button .dashicons {
+ font-size: 16px;
+ height: 16px;
+ line-height: 16px;
+ width: 16px;
+ }
+ .aoam-action-edit {
+ color: #2557c7 !important;
+ }
+ .aoam-action-view {
+ color: #0f6e9f !important;
  }
  .button-small {
  padding: 4px 8px;
@@ -7209,17 +7248,19 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  </span>
  </td>
  <td class="order-actions">
+ <div class="aoam-table-actions">
  <!-- View Details Button -->
- <button type="button" class="button button-small" onclick="viewOrderDetails(<?php echo $order->get_id(); ?>)">
+ <button type="button" class="button button-small aoam-action-button aoam-action-view" onclick="viewOrderDetails(<?php echo $order->get_id(); ?>)">
+ <span class="dashicons dashicons-visibility"></span>
  View Details
  </button>
  
  <!-- Status Update Form -->
- <form method="post" style="display: inline-block; margin-left: 5px;">
+ <form method="post" class="aoam-inline-status-form">
  <?php wp_nonce_field('update_order_status', 'moderator_nonce'); ?>
  <input type="hidden" name="order_id" value="<?php echo $order->get_id(); ?>">
  <input type="hidden" name="update_order_status" value="1">
- <select name="order_status" onchange="this.form.submit()" style="font-size: 12px; padding: 4px 8px;">
+ <select name="order_status" onchange="this.form.submit()" class="aoam-action-select">
  <option value="">Change Status</option>
  <option value="pending" <?php selected($order_status, 'pending'); ?>>Pending</option>
  <option value="partial" <?php selected($order_status, 'partial'); ?>>Partial</option>
@@ -7229,6 +7270,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <option value="cancelled" <?php selected($order_status, 'cancelled'); ?>>Cancelled</option>
  </select>
  </form>
+ </div>
  </td>
  </tr>
  <?php endforeach; ?>
@@ -7883,7 +7925,66 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  .status-completed { background: #46b450; color: #fff; }
  .status-cancelled { background: #aaa; color: #fff; }
  .status-refunded { background: #aaa; color: #fff; }
- .order-actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+ .order-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+ .aoam-table-actions {
+ align-items: center;
+ display: flex;
+ gap: 10px;
+ justify-content: center;
+ width: 100%;
+ }
+ .aoam-inline-status-form {
+ display: inline-flex;
+ margin: 0;
+ }
+ .aoam-action-button {
+ align-items: center !important;
+ background: #f8fbff !important;
+ border: 1px solid #c8d8ea !important;
+ border-radius: 8px !important;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+ color: #1f5f99 !important;
+ display: inline-flex !important;
+ gap: 6px !important;
+ justify-content: center !important;
+ min-height: 38px !important;
+ padding: 7px 12px !important;
+ text-decoration: none !important;
+ white-space: nowrap;
+ }
+ .aoam-action-button:hover,
+ .aoam-action-button:focus {
+ background: #eef6ff !important;
+ border-color: #2271b1 !important;
+ color: #0b4f82 !important;
+ }
+ .aoam-action-button .dashicons {
+ font-size: 16px;
+ height: 16px;
+ line-height: 16px;
+ width: 16px;
+ }
+ .aoam-action-select {
+ appearance: none;
+ background-color: #fff;
+ background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+ background-position: right 12px center;
+ background-repeat: no-repeat;
+ background-size: 16px 16px;
+ border: 1px solid #cfd8e3;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+ color: #1f2937;
+ font-size: 13px;
+ min-height: 38px;
+ min-width: 132px;
+ padding: 7px 34px 7px 12px;
+ }
+ .aoam-action-select:focus {
+ border-color: #2271b1;
+ box-shadow: 0 0 0 1px #2271b1;
+ outline: none;
+ }
  .modal-backdrop {
  position: fixed;
  top: 0;
