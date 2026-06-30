@@ -7612,7 +7612,12 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  color: #9ca3af;
  }
  .mobile-status-form select {
- background: #fff;
+ appearance: none;
+ background-color: #fff;
+ background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+ background-position: right 12px center;
+ background-repeat: no-repeat;
+ background-size: 16px 16px;
  border: 1px solid #dce2e8;
  border-radius: 10px;
  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
@@ -7714,6 +7719,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  }
  .mobile-status-form select {
  min-width: 138px;
+ padding-right: 34px;
  }
  }
  .order-products .product-name {
@@ -7968,17 +7974,18 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  appearance: none;
  background-color: #fff;
  background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
- background-position: right 12px center;
+ background-position: right 14px center;
  background-repeat: no-repeat;
  background-size: 16px 16px;
  border: 1px solid #cfd8e3;
  border-radius: 8px;
  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
  color: #1f2937;
- font-size: 13px;
- min-height: 38px;
+ font-size: 14px;
+ line-height: 1.4;
+ min-height: 42px;
  min-width: 132px;
- padding: 7px 34px 7px 12px;
+ padding: 8px 38px 8px 12px;
  }
  .aoam-action-select:focus {
  border-color: #2271b1;
