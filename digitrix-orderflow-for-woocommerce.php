@@ -27,6 +27,11 @@ define('AOAM_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('AOAM_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('AOAM_PLUGIN_BASENAME', plugin_basename(__FILE__));
 
+function aoam_is_post_request() {
+ $request_method = isset($_SERVER['REQUEST_METHOD']) ? sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) : '';
+ return 'POST' === $request_method;
+}
+
 // Check if WooCommerce is active
 if (!in_array('woocommerce/woocommerce.php', apply_filters('active_plugins', get_option('active_plugins')))) {
  add_action('admin_notices', 'aoam_woocommerce_missing_notice');
@@ -90,7 +95,7 @@ function aoam_enqueue_admin_assets() {
 
  wp_enqueue_script('aoam-admin-core', AOAM_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery'), AOAM_VERSION, true);
  wp_localize_script('aoam-admin-core', 'aoamAdmin', array(
- 'ajaxUrl' => admin_url('admin-ajax.php'),
+ 'ajaxUrl' => esc_url_raw(admin_url('admin-ajax.php')),
  'version' => AOAM_VERSION,
  'screenId' => $screen->id,
  ));
@@ -152,7 +157,7 @@ function aoam_plugin_settings_page() {
  }
  
  // Handle form submissions
- if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ if (aoam_is_post_request()) {
  if (isset($_POST['update_aoam_settings'], $_POST['aoam_settings_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['aoam_settings_nonce'])), 'aoam_settings')) {
  // Update assigned roles
  $selected_roles = isset($_POST['assigned_roles']) ? array_map('sanitize_text_field', wp_unslash((array) $_POST['assigned_roles'])) : array();
@@ -420,13 +425,13 @@ function aoam_plugin_settings_page() {
  $shift_end = esc_html($shift['end']);
  
  // Convert 24-hour format to 12-hour format with AM/PM
- $start_time_12hr = date("g:i A", strtotime($shift_start));
- $end_time_12hr = date("g:i A", strtotime($shift_end));
+ $start_time_12hr = gmdate("g:i A", strtotime($shift_start));
+ $end_time_12hr = gmdate("g:i A", strtotime($shift_end));
  
  // Determine shift type based on time
  $shift_type = "";
- $start_hour = (int)date('H', strtotime($shift_start));
- $end_hour = (int)date('H', strtotime($shift_end));
+ $start_hour = (int)gmdate('H', strtotime($shift_start));
+ $end_hour = (int)gmdate('H', strtotime($shift_end));
  
  if ($shift_key === 'shift_1') {
  $shift_type = "(Day Shift)";
@@ -610,10 +615,11 @@ function aoam_remote_order_import_page() {
  $settings = aoam_get_remote_import_settings();
  $message = '';
 
- if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['aoam_save_remote_import'])) {
+ if (aoam_is_post_request() && isset($_POST['aoam_save_remote_import'])) {
  check_admin_referer('aoam_remote_import_settings', 'aoam_remote_import_nonce');
  $settings['enabled'] = !empty($_POST['enabled']) ? 'yes' : 'no';
- $settings['sources'] = aoam_sanitize_remote_import_sources($_POST['sources'] ?? array());
+ $raw_sources = isset($_POST['sources']) ? wp_unslash($_POST['sources']) : array();
+ $settings['sources'] = aoam_sanitize_remote_import_sources($raw_sources);
  update_option('aoam_remote_import_settings', $settings);
  $message = 'Remote import settings saved.';
  }
@@ -1324,8 +1330,8 @@ function is_user_in_any_shift($user_id) {
  
  // Get current time
  $current_time = current_time('H:i');
- $current_hour = (int)date('H', strtotime($current_time));
- $current_minute = (int)date('i', strtotime($current_time));
+ $current_hour = (int)gmdate('H', strtotime($current_time));
+ $current_minute = (int)gmdate('i', strtotime($current_time));
  $current_decimal = $current_hour + ($current_minute / 60);
  
  // Get shift settings
@@ -1662,6 +1668,10 @@ function get_sequence_for_order_status($order_status) {
 
 function reset_all_sequences_tool() {
  if (isset($_POST['reset_all_sequences']) && current_user_can('manage_options')) {
+ $reset_nonce = isset($_POST['reset_sequences_nonce']) ? sanitize_text_field(wp_unslash($_POST['reset_sequences_nonce'])) : '';
+ if (!$reset_nonce || !wp_verify_nonce($reset_nonce, 'reset_sequences')) {
+ return;
+ }
  // Reset all sequence options
  update_option('last_assigned_general_moderator_sequence', 0);
  update_option('last_assigned_partial_moderator_sequence', 0);
@@ -2215,7 +2225,7 @@ function moderator_settings_main_page() {
  
  // Get today's assignment stats
  global $wpdb;
- $today = date('Y-m-d');
+ $today = aoam_format_display_date('Y-m-d');
  $today_assignments = $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(DISTINCT pm.post_id) 
  FROM {$wpdb->postmeta} pm 
@@ -2368,7 +2378,7 @@ function moderator_sequence_status_page() {
  $assigned_roles = aoam_get_assigned_roles();
  
  // Handle form submissions for this page only
- if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ if (aoam_is_post_request()) {
  
  // Handle status update
  if (isset($_POST['update_status'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
@@ -2649,8 +2659,8 @@ function moderator_sequence_status_page() {
  if (!empty($assigned_shifts)) {
  $shift_settings = aoam_get_shift_settings();
  $current_time = current_time('H:i');
- $current_hour = (int)date('H', strtotime($current_time));
- $current_minute = (int)date('i', strtotime($current_time));
+ $current_hour = (int)gmdate('H', strtotime($current_time));
+ $current_minute = (int)gmdate('i', strtotime($current_time));
  $current_decimal = $current_hour + ($current_minute / 60);
  
  foreach ($assigned_shifts as $shift_key) {
@@ -2850,8 +2860,9 @@ function moderator_sequence_status_page() {
  <div class="last-active">
  <?php 
  if ($last_active) {
- echo '<span class="date">' . date('M j, Y', strtotime($last_active)) . '</span>';
- echo '<br><small class="time">' . date('g:i A', strtotime($last_active)) . '</small>';
+ $last_active_timestamp = strtotime($last_active);
+ echo '<span class="date">' . esc_html(aoam_format_display_date('M j, Y', $last_active_timestamp)) . '</span>';
+ echo '<br><small class="time">' . esc_html(aoam_format_display_date('g:i A', $last_active_timestamp)) . '</small>';
  } else {
  echo '<span style="color:#666;">Never</span>';
  }
@@ -3120,7 +3131,7 @@ function moderator_product_assignments_page() {
  $assigned_roles = aoam_get_assigned_roles();
  
  // Handle form submissions for product assignments
- if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ if (aoam_is_post_request()) {
  
  // Handle product assignment update
  if (isset($_POST['update_products'], $_POST['moderator_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['moderator_nonce'])), 'moderator_settings')) {
@@ -4323,10 +4334,10 @@ function aoam_recent_assignments_ajax() {
  }
 
  $_GET['moderator_filter'] = isset($_POST['moderator_filter']) ? absint($_POST['moderator_filter']) : 0;
- $_GET['source_filter'] = isset($_POST['source_filter']) ? sanitize_key($_POST['source_filter']) : 'all';
- $_GET['status_filter'] = isset($_POST['status_filter']) ? sanitize_key($_POST['status_filter']) : 'all';
+ $_GET['source_filter'] = isset($_POST['source_filter']) ? sanitize_key(wp_unslash($_POST['source_filter'])) : 'all';
+ $_GET['status_filter'] = isset($_POST['status_filter']) ? sanitize_key(wp_unslash($_POST['status_filter'])) : 'all';
  $_GET['order_search'] = isset($_POST['order_search']) ? sanitize_text_field(wp_unslash($_POST['order_search'])) : '';
- $_GET['assignment_date_filter'] = isset($_POST['assignment_date_filter']) ? sanitize_key($_POST['assignment_date_filter']) : 'all';
+ $_GET['assignment_date_filter'] = isset($_POST['assignment_date_filter']) ? sanitize_key(wp_unslash($_POST['assignment_date_filter'])) : 'all';
  $_GET['custom_start_date'] = isset($_POST['custom_start_date']) ? sanitize_text_field(wp_unslash($_POST['custom_start_date'])) : '';
  $_GET['custom_end_date'] = isset($_POST['custom_end_date']) ? sanitize_text_field(wp_unslash($_POST['custom_end_date'])) : '';
  $_GET['per_page'] = isset($_POST['per_page']) ? absint($_POST['per_page']) : 20;
@@ -4489,6 +4500,7 @@ function aoam_get_recent_assignment_flow_counts($base_where_sql, $base_params, $
  }
 
  $flow_where[] = '(' . implode(' OR ', $origin_meta_where) . ')';
+ // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- WHERE fragments above are static SQL clauses; values are passed through prepare placeholders.
  $flow_counts[$from_status][$to_status] = (int) $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(DISTINCT pm.post_id)
  FROM {$wpdb->postmeta} pm
@@ -4725,6 +4737,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $today_where[] = 'o.date_created_gmt >= %s';
  $today_where[] = 'o.date_created_gmt <= %s';
  $today_params = array_merge($base_params, array($today_date_range['start_gmt'], $today_date_range['end_gmt']));
+ // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- WHERE fragments above are static SQL clauses; values are passed through prepare placeholders.
  $today_orders_count = (int) $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(DISTINCT pm.post_id)
  FROM {$wpdb->postmeta} pm
@@ -4753,6 +4766,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  $offset = ($paged - 1) * $per_page;
  $query_params[] = $per_page;
  $query_params[] = $offset;
+ // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- WHERE fragments above are static SQL clauses; values are passed through prepare placeholders.
  $order_ids = $wpdb->get_col($wpdb->prepare("
  SELECT DISTINCT pm.post_id
  FROM {$wpdb->postmeta} pm
@@ -4925,7 +4939,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  | Status: <strong><?php echo esc_html(ucfirst($status_filter)); ?></strong>
  <?php endif; ?>
  <?php if ($source_filter !== 'all'): ?>
- | Source: <strong><?php echo esc_html($source_filter === 'current' ? 'Current Site' : parse_url($remote_source_options[$source_filter] ?? '', PHP_URL_HOST)); ?></strong>
+| Source: <strong><?php echo esc_html($source_filter === 'current' ? 'Current Site' : wp_parse_url($remote_source_options[$source_filter] ?? '', PHP_URL_HOST)); ?></strong>
  <?php endif; ?>
  <?php if ($assignment_date_filter !== 'all'): ?>
  | Date: <strong><?php echo esc_html(ucwords(str_replace('_', ' ', $assignment_date_filter))); ?></strong>
@@ -4978,7 +4992,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <option value="current" <?php selected($source_filter, 'current'); ?>>Current Site</option>
  <?php foreach ($remote_source_options as $source_key => $source_url): ?>
  <option value="<?php echo esc_attr($source_key); ?>" <?php selected($source_filter, $source_key); ?>>
- Remote: <?php echo esc_html(parse_url($source_url, PHP_URL_HOST) ?: $source_url); ?>
+ Remote: <?php echo esc_html(wp_parse_url($source_url, PHP_URL_HOST) ?: $source_url); ?>
  </option>
  <?php endforeach; ?>
  </select>
@@ -6278,7 +6292,7 @@ function aoam_build_moderator_filtered_order_status_views($selected, $base_url, 
  }
  }
 
- $view_links['all'] = aoam_build_order_status_view_link($base_url, $status_arg, 'all', __('All', 'woocommerce'), $all_count, $current === '' || $current === 'all');
+ $view_links['all'] = aoam_build_order_status_view_link($base_url, $status_arg, 'all', __('All', 'digitrix-orderflow-for-woocommerce'), $all_count, $current === '' || $current === 'all');
 
  foreach ($statuses as $slug => $label) {
  $count = isset($counts[$slug]) ? absint($counts[$slug]) : 0;
@@ -6837,6 +6851,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
 
  $query .= " ORDER BY pm.meta_id DESC";
  
+ // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Query is prepared above, then only a static ORDER BY clause is appended.
  $order_ids = $wpdb->get_col($query);
  
  // Filter by status and prepare orders array
@@ -9192,7 +9207,7 @@ function add_moderator_section_after_order_details($order) {
  $current_user = wp_get_current_user();
  
  if (in_array('moderator', $current_user->roles)) {
- $current_page = $_SERVER['REQUEST_URI'] ?? '';
+ $current_page = isset($_SERVER['REQUEST_URI']) ? esc_url_raw(wp_unslash($_SERVER['REQUEST_URI'])) : '';
  
  // Allowed pages for moderators
  $allowed_pages = array(
@@ -9213,7 +9228,7 @@ function add_moderator_section_after_order_details($order) {
  
  // If not allowed, redirect to My Orders page
  if (!$is_allowed && strpos($current_page, '/wp-admin/') !== false) {
- wp_redirect(admin_url('admin.php?page=digitrix-orderflow-my-orders'));
+ wp_safe_redirect(admin_url('admin.php?page=digitrix-orderflow-my-orders'));
  exit;
  }
  }
@@ -9300,8 +9315,9 @@ function moderator_recent_orders_widget() {
  $order_status = $order->get_status();
  $status_class = 'status-' . $order_status;
  $status_label = wc_get_order_status_name($order_status);
- $order_date = date('M j, g:i A', strtotime($order_data->post_date));
- $is_today = date('Y-m-d', strtotime($order_data->post_date)) === date('Y-m-d');
+ $order_timestamp = strtotime($order_data->post_date);
+ $order_date = aoam_format_display_date('M j, g:i A', $order_timestamp);
+ $is_today = aoam_format_display_date('Y-m-d', $order_timestamp) === aoam_format_display_date('Y-m-d');
  
  echo '<tr style="border-bottom: 1px solid #f0f0f0;">';
  echo '<td style="padding: 8px 0;">';
@@ -9390,7 +9406,7 @@ function moderator_orders_dashboard_widget() {
  
  // Get today's orders count
  global $wpdb;
- $today = date('Y-m-d');
+ $today = aoam_format_display_date('Y-m-d');
  
  $today_orders = $wpdb->get_var($wpdb->prepare("
  SELECT COUNT(pm.post_id) 
@@ -9630,7 +9646,7 @@ function moderator_reassign_orders_page() {
  $assigned_roles = aoam_get_assigned_roles();
  
  // Process form submission
- if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reassign_orders'])) {
+ if (aoam_is_post_request() && isset($_POST['reassign_orders'])) {
  $result = process_reassignment_form();
  
  if ($result['success']) {
