@@ -31,7 +31,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 | Page | Slug | Purpose |
 | --- | --- | --- |
 | Dashboard | `moderator-settings` | User counts, assignment overview, system summary |
-| Recent Assignments | `moderator-recent-assignments` | Assigned order table, filters, analytics, export tools |
+| Recent Assignments | `moderator-recent-assignments` | Assigned order table, filters, and analytics |
 | Sequence & Status | `moderator-sequence-status` | Moderator sequence, active/inactive state, shift controls |
 | Product Assignments | `moderator-product-assignments` | Assign products to moderators |
 | Reassign | `moderator-reassign-orders` | Bulk reassignment from selected source users to active users |

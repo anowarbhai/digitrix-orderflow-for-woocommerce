@@ -5209,24 +5209,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  <?php endif; ?>
  </div>
 
- <!-- Export Options -->
- <div class="card">
- <h2>Export Options</h2>
- <div style="display: flex; gap: 10px; flex-wrap: wrap;">
- <button type="button" class="button" onclick="exportAssignments('csv')">
- <span class="dashicons dashicons-download"></span>
- Export to CSV
- </button>
- <button type="button" class="button" onclick="exportAssignments('pdf')">
- <span class="dashicons dashicons-pdf"></span>
- Export to PDF
- </button>
- <button type="button" class="button" onclick="printAssignments()">
- <span class="dashicons dashicons-printer"></span>
- Print Report
- </button>
- </div>
- </div>
  <?php if (!$ajax_request): ?>
  </div>
  <?php endif; ?>
@@ -5895,15 +5877,6 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  }
  });
  
- // Export functions (placeholder)
- function exportAssignments(format) {
- alert('Export to ' + format.toUpperCase() + ' functionality would be implemented here.');
- // In a real implementation, this would make an AJAX call to generate and download the file
- }
- 
- function printAssignments() {
- window.print();
- }
  </script>
  <?php
 }
@@ -6797,7 +6770,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  
  ?>
  <div class="notice notice-success">
- <p> Order #<?php echo $order_id; ?> status updated to <?php echo ucfirst($new_status); ?> successfully!</p>
+ <p> Order #<?php echo esc_html($order_id); ?> status updated to <?php echo esc_html(ucfirst($new_status)); ?> successfully!</p>
  </div>
  <?php
  } else {
@@ -6823,7 +6796,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <!-- Header -->
  <div class="moderator-profile" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #ccd0d4;">
  <div>
- <h1 style="margin: 0;">My Orders - <?php echo $current_user->display_name; ?> 
+ <h1 style="margin: 0;">My Orders - <?php echo esc_html($current_user->display_name); ?> 
  <?php $moderator_status = get_user_meta($current_user->ID, 'moderator_status', true); ?>
  <?php if ($moderator_status == 'active'): ?>
  <span class="moderator-active-badge">(Active)</span>
@@ -6832,7 +6805,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <?php endif; ?>
  </h1>
  <p style="margin: 5px 0 0 0; color: #666;">
- <strong>Email:</strong> <?php echo $current_user->user_email; ?> | 
+ <strong>Email:</strong> <?php echo esc_html($current_user->user_email); ?> | 
  <strong>Role:</strong> <?php echo implode(', ', $current_user->roles); ?>
  </p>
  </div>
@@ -7068,22 +7041,22 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <?php if (!empty($phone_search)): ?>
  <strong> No orders found for phone number:</strong> <?php echo esc_html($phone_search); ?>
  <?php if ($date_filter === 'today' && $status_filter !== 'all'): ?>
- with status "<?php echo $status_filter; ?>" for today.
+ with status "<?php echo esc_html($status_filter); ?>" for today.
  <?php elseif ($date_filter === 'today'): ?>
  for today.
  <?php elseif ($status_filter !== 'all'): ?>
- with status "<?php echo $status_filter; ?>".
+ with status "<?php echo esc_html($status_filter); ?>".
  <?php else: ?>
  .
  <?php endif; ?>
  <?php elseif ($date_filter === 'today' && $status_filter !== 'all'): ?>
- No <?php echo $status_filter; ?> orders found for today (<?php echo esc_html(aoam_format_display_date('F j, Y')); ?>).
+ No <?php echo esc_html($status_filter); ?> orders found for today (<?php echo esc_html(aoam_format_display_date('F j, Y')); ?>).
  <?php elseif ($date_filter === 'today'): ?>
  No orders found for today (<?php echo esc_html(aoam_format_display_date('F j, Y')); ?>).
  <?php elseif ($status_filter !== 'all'): ?>
- No orders found with status: <?php echo $status_filter; ?>.
+ No orders found with status: <?php echo esc_html($status_filter); ?>.
  <?php else: ?>
- You have <?php echo $status_counts['all']; ?> total orders, but none match current filters.
+ You have <?php echo esc_html($status_counts['all']); ?> total orders, but none match current filters.
  <?php endif; ?>
  </p>
  <p>
@@ -7124,11 +7097,11 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <div style="font-size: 12px;">Showing</div>
  </div>
  <div style="text-align: center; padding: 10px; background: #f0f6ff; border-radius: 6px;">
- <div style="font-size: 18px; font-weight: bold; color: #46b450;"><?php echo $today_orders_count; ?></div>
+ <div style="font-size: 18px; font-weight: bold; color: #46b450;"><?php echo esc_html($today_orders_count); ?></div>
  <div style="font-size: 12px;">Today's Total</div>
  </div>
  <div style="text-align: center; padding: 10px; background: #f0f6ff; border-radius: 6px;">
- <div style="font-size: 18px; font-weight: bold; color: #ffb900;"><?php echo $status_counts['all']; ?></div>
+ <div style="font-size: 18px; font-weight: bold; color: #ffb900;"><?php echo esc_html($status_counts['all']); ?></div>
  <div style="font-size: 12px;">All Time Total</div>
  </div>
  </div>
@@ -7158,8 +7131,8 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  $status_label = wc_get_order_status_name($status);
  ?>
  <div style="text-align: center; padding: 8px 12px; background: white; border-radius: 4px; border: 1px solid #ddd; min-width: 100px;">
- <div style="font-size: 16px; font-weight: bold; color: #0073aa;"><?php echo $count; ?></div>
- <div style="font-size: 11px; color: #666;"><?php echo $status_label; ?></div>
+ <div style="font-size: 16px; font-weight: bold; color: #0073aa;"><?php echo esc_html($count); ?></div>
+ <div style="font-size: 11px; color: #666;"><?php echo esc_html($status_label); ?></div>
  </div>
  <?php endif; endforeach; ?>
  </div>
@@ -7204,7 +7177,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  ?>
  <tr data-order-id="<?php echo esc_attr($order->get_id()); ?>">
  <td>
- <strong>#<?php echo $order->get_id(); ?></strong>
+ <strong>#<?php echo esc_html($order->get_id()); ?></strong>
  <?php if ($is_today): ?>
  <span style="color: #46b450; font-size: 10px; margin-left: 5px;"></span>
  <?php endif; ?>
@@ -7217,12 +7190,12 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <?php endif; ?>
  </td>
  <td>
- <?php echo $order->get_formatted_billing_full_name(); ?>
+ <?php echo esc_html($order->get_formatted_billing_full_name()); ?>
  <?php if (!empty($order->get_billing_email())) {
  echo '<br><small>'.$order->get_billing_email().'</small>';
  } ?>
  
- <br><small><?php echo $order->get_billing_phone(); ?></small>
+ <br><small><?php echo esc_html($order->get_billing_phone()); ?></small>
  </td>
  <td> 
  <div class="order-products">
@@ -7238,19 +7211,19 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  + <?php echo count($product_names) - 2; ?> more products
  </div>
  <?php endif; ?>
- (<?php echo $item_count; ?> items)
+ (<?php echo esc_html($item_count); ?> items)
  </div>
  </td>
- <td><?php echo $order->get_formatted_order_total(); ?></td>
+ <td><?php echo wp_kses_post($order->get_formatted_order_total()); ?></td>
  <td>
- <span class="order-status-badge <?php echo $status_class; ?>">
- <?php echo $status_label; ?>
+ <span class="order-status-badge <?php echo esc_attr($status_class); ?>">
+ <?php echo esc_html($status_label); ?>
  </span>
  </td>
  <td class="order-actions">
  <div class="aoam-table-actions">
  <!-- View Details Button -->
- <button type="button" class="button button-small aoam-action-button aoam-action-view" onclick="viewOrderDetails(<?php echo $order->get_id(); ?>)">
+ <button type="button" class="button button-small aoam-action-button aoam-action-view" onclick="viewOrderDetails(<?php echo esc_js($order->get_id()); ?>)">
  <span class="dashicons dashicons-visibility"></span>
  View Details
  </button>
@@ -7258,7 +7231,7 @@ function aoam_render_moderator_orders_page_content($ajax_request = false) {
  <!-- Status Update Form -->
  <form method="post" class="aoam-inline-status-form">
  <?php wp_nonce_field('update_order_status', 'moderator_nonce'); ?>
- <input type="hidden" name="order_id" value="<?php echo $order->get_id(); ?>">
+ <input type="hidden" name="order_id" value="<?php echo esc_attr($order->get_id()); ?>">
  <input type="hidden" name="update_order_status" value="1">
  <select name="order_status" onchange="this.form.submit()" class="aoam-action-select">
  <option value="">Change Status</option>
@@ -8351,13 +8324,13 @@ function aoam_get_moderator_order_details() {
  ?>
  <tr>
  <td style="padding: 8px; border-bottom: 1px solid #eee;">
- <strong><?php echo $item->get_name(); ?></strong>
+ <strong><?php echo esc_html($item->get_name()); ?></strong>
  <?php if ($product) : ?>
- <br><small>SKU: <?php echo $product->get_sku() ?: 'N/A'; ?></small>
+ <br><small>SKU: <?php echo esc_html($product && $product->get_sku() ? $product->get_sku() : 'N/A'); ?></small>
  <?php endif; ?>
  </td>
  <td style="padding: 8px; text-align: center; border-bottom: 1px solid #eee;">
- <?php echo $item->get_quantity(); ?>
+ <?php echo esc_html($item->get_quantity()); ?>
  </td>
  <td style="padding: 8px; text-align: right; border-bottom: 1px solid #eee;">
  <?php echo wc_price($item->get_subtotal() / $item->get_quantity()); ?>
@@ -8408,7 +8381,7 @@ function aoam_get_moderator_order_details() {
  <h5 style="margin-top: 0;">Update Order Status</h5>
  <form method="post" id="update_status_form" style="display: flex; gap: 10px; align-items: center;">
  <?php wp_nonce_field('update_order_status', 'status_update_nonce'); ?>
- <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
+ <input type="hidden" name="order_id" value="<?php echo esc_attr($order_id); ?>">
  <input type="hidden" name="update_order_status" value="1">
  <select name="order_status" id="order_status_select" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
  <option value="">Select New Status</option>
@@ -8472,7 +8445,7 @@ function aoam_get_moderator_order_details() {
  
  <form method="post" id="change_moderator_form" style="display: flex; gap: 10px; align-items: center;">
  <?php wp_nonce_field('change_order_moderator', 'moderator_change_nonce'); ?>
- <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
+ <input type="hidden" name="order_id" value="<?php echo esc_attr($order_id); ?>">
  <input type="hidden" name="change_order_moderator" value="1">
  
  <select name="new_moderator_id" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; min-width: 200px;">
@@ -8481,7 +8454,7 @@ function aoam_get_moderator_order_details() {
  $moderator_sequence = get_user_meta($moderator->ID, 'moderator_sequence', true);
  $display_name = $moderator->display_name . ($moderator_sequence ? ' (User ' . $moderator_sequence . ')' : '');
  ?>
- <option value="<?php echo $moderator->ID; ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
+ <option value="<?php echo esc_attr($moderator->ID); ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
  <?php echo esc_html($display_name); ?>
  </option>
  <?php endforeach; ?>
@@ -8981,7 +8954,7 @@ function add_moderator_section_after_order_details($order) {
  $moderator_sequence = get_user_meta($moderator->ID, 'moderator_sequence', true);
  $display_name = $moderator->display_name . ($moderator_sequence ? ' (Moderator ' . $moderator_sequence . ')' : '');
  ?>
- <option value="<?php echo $moderator->ID; ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
+ <option value="<?php echo esc_attr($moderator->ID); ?>" <?php selected($current_moderator_id, $moderator->ID); ?>>
  <?php echo esc_html($display_name); ?>
  </option>
  <?php endforeach; ?>
@@ -8999,7 +8972,7 @@ function add_moderator_section_after_order_details($order) {
  jQuery(document).ready(function($) {
  $('#update_moderator_direct').click(function() {
  var newModeratorId = $('#assigned_moderator_direct').val();
- var orderId = <?php echo $order_id; ?>;
+ var orderId = <?php echo wp_json_encode(absint($order_id)); ?>;
  
  if (!newModeratorId) {
  alert(' Please select a moderator.');
@@ -9635,7 +9608,7 @@ function moderator_welcome_panel() {
  if (in_array('moderator', $current_user->roles) && $current_screen->id === 'dashboard') {
  ?>
  <div class="moderator-dashboard-welcome">
- <h2> Welcome, <?php echo $current_user->display_name; ?>!</h2>
+ <h2> Welcome, <?php echo esc_html($current_user->display_name); ?>!</h2>
  <p>You are logged in as a <strong>Moderator</strong>. Here's what you can do:</p>
  <ul>
  <li> <strong>View and manage</strong> your assigned orders in "My Orders"</li>
@@ -9662,17 +9635,14 @@ function moderator_reassign_orders_page() {
  
  if ($result['success']) {
  echo '<div class="notice notice-success is-dismissible">';
- echo '<p>' . $result['message'] . '</p>';
+ echo '<p>' . esc_html($result['message']) . '</p>';
  if (isset($result['details'])) {
- echo '<pre style="background: #f8f9fa; padding: 10px; margin: 10px 0;">' . $result['details'] . '</pre>';
+ echo '<pre style="background: #f8f9fa; padding: 10px; margin: 10px 0;">' . esc_html($result['details']) . '</pre>';
  }
  echo '</div>';
  } else {
  echo '<div class="notice notice-error is-dismissible">';
- echo '<p>' . $result['message'] . '</p>';
- if (isset($result['debug'])) {
- echo '<pre style="background: #fff5f5; padding: 10px; margin: 10px 0;">' . $result['debug'] . '</pre>';
- }
+ echo '<p>' . esc_html($result['message']) . '</p>';
  echo '</div>';
  }
  }
@@ -9775,7 +9745,7 @@ function moderator_reassign_orders_page() {
  </div>
  <div class="user-info">
  <h4><?php echo esc_html($user['display_name']); ?></h4>
- <p class="user-meta">User <?php echo $user['sequence']; ?> <?php echo esc_html($user['user_email']); ?></p>
+ <p class="user-meta">User <?php echo esc_html($user['sequence']); ?> <?php echo esc_html($user['user_email']); ?></p>
  <span class="aoam-user-status <?php echo $is_inactive ? 'is-inactive' : 'is-active'; ?>"><?php echo $is_inactive ? 'Inactive' : 'Active'; ?></span>
  </div>
  </div>
@@ -9813,7 +9783,7 @@ function moderator_reassign_orders_page() {
  </div>
  <div class="user-info">
  <h4><?php echo esc_html($user['display_name']); ?></h4>
- <p class="user-meta">User <?php echo $user['sequence']; ?></p>
+ <p class="user-meta">User <?php echo esc_html($user['sequence']); ?></p>
  </div>
  </div>
  
@@ -9848,11 +9818,11 @@ function moderator_reassign_orders_page() {
  <?php foreach ($order_status_options as $status_key => $status_name): ?>
  <div class="status-card">
  <label class="checkbox-container">
- <input type="checkbox" class="status-checkbox" value="<?php echo $status_key; ?>">
+ <input type="checkbox" class="status-checkbox" value="<?php echo esc_attr($status_key); ?>">
  <span class="checkmark"></span>
  <div class="status-content">
  <div class="status-name" style="color: <?php echo aoam_get_status_color($status_key); ?>;">
- <?php echo $status_name; ?>
+ <?php echo esc_html($status_name); ?>
  </div>
  </div>
  </label>
@@ -10649,8 +10619,7 @@ function process_reassignment_form() {
  if (empty($orders)) {
  return array(
  'success' => false,
- 'message' => 'No orders found to reassign with the selected criteria.',
- 'debug' => "Source user IDs: " . implode(', ', $source_users) . "\nStatuses: " . implode(', ', $order_statuses)
+ 'message' => 'No orders found to reassign with the selected criteria.'
  );
  }
  
@@ -10762,8 +10731,7 @@ function process_bulk_reassignment($source_user_ids, $active_users, $order_statu
  } else {
  return array(
  'success' => false,
- 'message' => ' Failed to reassign any orders.',
- 'debug' => "Total orders: " . count($orders) . "\nActive users: " . count($active_users)
+ 'message' => 'Failed to reassign any orders.'
  );
  }
 }
