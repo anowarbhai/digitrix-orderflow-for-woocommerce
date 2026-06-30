@@ -5903,6 +5903,9 @@ add_action('woocommerce_order_list_table_restrict_manage_orders', 'aoam_render_h
 add_action('restrict_manage_posts', 'aoam_render_cpt_order_moderator_filter', 20, 2);
 add_action('pre_get_posts', 'aoam_apply_cpt_order_moderator_filter', 20);
 add_filter('woocommerce_shop_order_list_table_prepare_items_query_args', 'aoam_apply_hpos_order_moderator_filter');
+add_filter('woocommerce_shop_order_list_table_order_count', 'aoam_filter_hpos_order_status_count_by_moderator', 20, 2);
+add_filter('woocommerce_before_shop_order_list_table_view_links', 'aoam_render_hpos_moderator_filtered_status_views');
+add_filter('views_edit-shop_order', 'aoam_render_cpt_moderator_filtered_status_views');
 
 function aoam_get_order_moderator_filter_value() {
  if (!isset($_GET['aoam_moderator_filter'])) {
@@ -6155,6 +6158,159 @@ function aoam_database_table_exists($table_name) {
  global $wpdb;
 
  return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table_name)) === $table_name;
+}
+
+function aoam_filter_hpos_order_status_count_by_moderator($count, $statuses) {
+ $selected = aoam_get_order_moderator_filter_value();
+ if ($selected === '') {
+ return $count;
+ }
+
+ $counts = aoam_get_moderator_filtered_order_status_counts($selected);
+ $total = 0;
+
+ foreach ((array) $statuses as $status) {
+ $total += isset($counts[$status]) ? absint($counts[$status]) : 0;
+ }
+
+ return $total;
+}
+
+function aoam_get_moderator_filtered_order_status_counts($selected) {
+ static $cache = array();
+
+ if (isset($cache[$selected])) {
+ return $cache[$selected];
+ }
+
+ global $wpdb;
+
+ $order_ids = aoam_get_order_ids_for_moderator_filter($selected);
+ $status_ids = array();
+
+ if (!empty($order_ids)) {
+ $id_placeholders = implode(',', array_fill(0, count($order_ids), '%d'));
+
+ $legacy_rows = $wpdb->get_results(
+ $wpdb->prepare(
+ "SELECT ID, post_status
+ FROM {$wpdb->posts}
+ WHERE post_type = 'shop_order'
+ AND ID IN ({$id_placeholders})",
+ $order_ids
+ )
+ );
+
+ foreach ($legacy_rows as $row) {
+ $status_ids[$row->post_status][absint($row->ID)] = true;
+ }
+
+ $hpos_orders_table = $wpdb->prefix . 'wc_orders';
+ if (aoam_database_table_exists($hpos_orders_table)) {
+ $hpos_rows = $wpdb->get_results(
+ $wpdb->prepare(
+ "SELECT id, status
+ FROM {$hpos_orders_table}
+ WHERE type = 'shop_order'
+ AND id IN ({$id_placeholders})",
+ $order_ids
+ )
+ );
+
+ foreach ($hpos_rows as $row) {
+ $status_ids[$row->status][absint($row->id)] = true;
+ }
+ }
+ }
+
+ $counts = array();
+ foreach ($status_ids as $status => $ids) {
+ $counts[$status] = count($ids);
+ }
+
+ $cache[$selected] = $counts;
+ return $counts;
+}
+
+function aoam_render_hpos_moderator_filtered_status_views($views) {
+ $selected = aoam_get_order_moderator_filter_value();
+ if ($selected === '') {
+ return $views;
+ }
+
+ $base_url = admin_url('admin.php?page=wc-orders');
+ return aoam_build_moderator_filtered_order_status_views($selected, $base_url, 'status');
+}
+
+function aoam_render_cpt_moderator_filtered_status_views($views) {
+ $selected = aoam_get_order_moderator_filter_value();
+ if ($selected === '') {
+ return $views;
+ }
+
+ $base_url = admin_url('edit.php?post_type=shop_order');
+ return aoam_build_moderator_filtered_order_status_views($selected, $base_url, 'post_status');
+}
+
+function aoam_build_moderator_filtered_order_status_views($selected, $base_url, $status_arg) {
+ $view_links = array();
+ $counts = aoam_get_moderator_filtered_order_status_counts($selected);
+ $statuses = aoam_get_visible_order_statuses_for_filter();
+ $current = isset($_GET[$status_arg]) ? sanitize_key(wp_unslash($_GET[$status_arg])) : 'all';
+ $all_count = 0;
+
+ foreach ($statuses as $slug => $label) {
+ $status_object = get_post_status_object($slug);
+ if ($status_object && $status_object->show_in_admin_all_list && $slug !== 'auto-draft') {
+ $all_count += isset($counts[$slug]) ? absint($counts[$slug]) : 0;
+ }
+ }
+
+ $view_links['all'] = aoam_build_order_status_view_link($base_url, $status_arg, 'all', __('All', 'woocommerce'), $all_count, $current === '' || $current === 'all');
+
+ foreach ($statuses as $slug => $label) {
+ $count = isset($counts[$slug]) ? absint($counts[$slug]) : 0;
+ if ($count < 1) {
+ continue;
+ }
+
+ $view_links[$slug] = aoam_build_order_status_view_link($base_url, $status_arg, $slug, $label, $count, $current === $slug);
+ }
+
+ return $view_links;
+}
+
+function aoam_get_visible_order_statuses_for_filter() {
+ $extra_statuses = array();
+
+ foreach (array('trash', 'draft', 'auto-draft') as $status) {
+ $status_object = get_post_status_object($status);
+ if ($status_object) {
+ $extra_statuses[$status] = $status_object->label;
+ }
+ }
+
+ return array_intersect_key(
+ array_merge(wc_get_order_statuses(), $extra_statuses),
+ array_flip(get_post_stati(array('show_in_admin_status_list' => true)))
+ );
+}
+
+function aoam_build_order_status_view_link($base_url, $status_arg, $slug, $label, $count, $current) {
+ $args = array(
+ 'aoam_moderator_filter' => aoam_get_order_moderator_filter_value(),
+ );
+
+ if ($slug !== 'all') {
+ $args[$status_arg] = $slug;
+ }
+
+ $url = esc_url(add_query_arg($args, $base_url));
+ $label = esc_html($label);
+ $count = number_format_i18n($count);
+ $class = $current ? ' class="current"' : '';
+
+ return "<a href='{$url}'{$class}>{$label} <span class='count'>({$count})</span></a>";
 }
 
 // Display moderator sequence and status in orders list
