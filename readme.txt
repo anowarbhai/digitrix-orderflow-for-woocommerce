@@ -78,7 +78,7 @@ Use WooCommerce REST API credentials with the minimum permissions required to re
 
 = 1.2.0 =
 * Added page entry files for admin screens.
-* Added structured assets for admin, Recent Assignments, and Simple Orders pages.
+* Added structured assets for admin, Recent Assignments, and Moderator Orders pages.
 * Added remote WooCommerce import improvements.
 * Added Recent Assignments flow analytics.
 * Improved Remote Import source management.

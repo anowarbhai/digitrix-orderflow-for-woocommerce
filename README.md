@@ -37,7 +37,7 @@ Professional WooCommerce operations plugin for assigning orders to moderators, i
 | Reassign | `moderator-reassign-orders` | Bulk reassignment from selected source users to active users |
 | Plugin Settings | `moderator-plugin-settings` | Role and plugin behavior settings |
 | Remote Import | `moderator-remote-import` | Remote WooCommerce source configuration and manual import |
-| My Orders | `moderator-simple-orders` | Moderator-facing order list and mobile card workflow |
+| My Orders | `digitrix-orderflow-my-orders` | Moderator-facing order list and mobile card workflow |
 
 ## File Structure
 
@@ -51,11 +51,11 @@ digitrix-orderflow-for-woocommerce/
 |   |-- css/
 |   |   |-- admin.css
 |   |   |-- recent-assignments.css
-|   |   `-- simple-orders.css
+|   |   `-- moderator-orders.css
 |   `-- js/
 |       |-- admin-core.js
 |       |-- recent-assignments.js
-|       `-- simple-orders.js
+|       `-- moderator-orders.js
 `-- includes/
     `-- pages/
         |-- dashboard.php
@@ -137,13 +137,13 @@ php -l digitrix-orderflow-for-woocommerce.php
 - Added centralized plugin constants and page-specific asset loading.
 - Added WordPress.org `readme.txt`.
 - Removed external CDN usage.
-- Added page-specific CSS/JS asset files for Recent Assignments and Simple Orders.
+- Added page-specific CSS/JS asset files for Recent Assignments and Moderator Orders.
 - Added plugin action links and uninstall guard.
 
 ### 1.1.x
 
 - Added remote WooCommerce REST API import and status sync.
-- Added AJAX Recent Assignments and Simple Orders workflows.
+- Added AJAX Recent Assignments and Moderator Orders workflows.
 - Added mobile card view for moderator orders.
 - Added completion/cancellation flow analytics.
 - Added Dhaka timezone display.

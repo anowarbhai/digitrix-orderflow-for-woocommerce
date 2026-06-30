@@ -83,9 +83,9 @@ function aoam_enqueue_admin_assets() {
  wp_enqueue_script('aoam-recent-assignments', AOAM_PLUGIN_URL . 'assets/js/recent-assignments.js', array('jquery'), AOAM_VERSION, true);
  }
 
- if (strpos($screen->id, 'moderator-simple-orders') !== false) {
- wp_enqueue_style('aoam-simple-orders', AOAM_PLUGIN_URL . 'assets/css/simple-orders.css', array('aoam-admin'), AOAM_VERSION);
- wp_enqueue_script('aoam-simple-orders', AOAM_PLUGIN_URL . 'assets/js/simple-orders.js', array('jquery'), AOAM_VERSION, true);
+ if (strpos($screen->id, 'digitrix-orderflow-my-orders') !== false) {
+ wp_enqueue_style('aoam-moderator-orders', AOAM_PLUGIN_URL . 'assets/css/moderator-orders.css', array('aoam-admin'), AOAM_VERSION);
+ wp_enqueue_script('aoam-moderator-orders', AOAM_PLUGIN_URL . 'assets/js/moderator-orders.js', array('jquery'), AOAM_VERSION, true);
  }
 
  wp_enqueue_script('aoam-admin-core', AOAM_PLUGIN_URL . 'assets/js/admin-core.js', array('jquery'), AOAM_VERSION, true);
@@ -4068,7 +4068,7 @@ function moderator_recent_assignments_page() {
  type: 'POST',
  dataType: 'json',
  data: {
- action: 'get_moderator_order_details_simple',
+ action: 'aoam_get_moderator_order_details',
  order_id: orderId,
  nonce: '<?php echo esc_js(wp_create_nonce('moderator_order_details')); ?>'
  }
@@ -5805,7 +5805,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  });
  
  function viewOrderDetails(orderId) {
- // Simple loading message
+ // Loading message.
  jQuery('.modal-backdrop').remove();
  document.getElementById("modal-order-id").textContent = orderId;
  document.getElementById("order-details-content").innerHTML = "<div style='text-align: center; padding: 40px;'><div class='spinner is-active' style='float: none;'></div><p>Loading order details...</p></div>";
@@ -5820,7 +5820,7 @@ function aoam_render_recent_assignments_page_content($ajax_request = false) {
  url: "<?php echo admin_url('admin-ajax.php'); ?>",
  type: "POST",
  data: {
- action: "get_moderator_order_details_simple",
+ action: "aoam_get_moderator_order_details",
  order_id: orderId,
  nonce: "<?php echo wp_create_nonce('moderator_order_details'); ?>"
  },
@@ -5962,11 +5962,10 @@ function initialize_moderator_status() {
 
 
 
-// Simple user orders page - WITH FILTERS
-add_action('admin_menu', 'simple_moderator_orders_menu');
+// Moderator orders page.
+add_action('admin_menu', 'aoam_moderator_orders_menu');
 
-// Simple user orders page - WITH PROPER ACCESS FIX
-function simple_moderator_orders_menu() {
+function aoam_moderator_orders_menu() {
  $current_user = wp_get_current_user();
  
  // Check if user has any assigned role
@@ -5978,8 +5977,8 @@ function simple_moderator_orders_menu() {
  'My Orders',
  'My Orders', 
  'read',
- 'moderator-simple-orders',
- 'simple_moderator_orders_page',
+ 'digitrix-orderflow-my-orders',
+ 'aoam_moderator_orders_page',
  'dashicons-clipboard',
  25
  );
@@ -6002,7 +6001,7 @@ function fix_moderator_admin_bar($wp_admin_bar) {
  $wp_admin_bar->add_node(array(
  'id' => 'moderator-orders',
             'title' => 'My Orders',
- 'href' => admin_url('admin.php?page=moderator-simple-orders'),
+ 'href' => admin_url('admin.php?page=digitrix-orderflow-my-orders'),
  'parent' => 'site-name'
  ));
  }
@@ -6023,9 +6022,9 @@ function aoam_hide_admin_bar_for_assigned_roles($show) {
  return $show;
 }
 
-add_action('admin_head', 'aoam_hide_wp_admin_toolbar_on_simple_orders');
-function aoam_hide_wp_admin_toolbar_on_simple_orders() {
- if (($_GET['page'] ?? '') !== 'moderator-simple-orders') {
+add_action('admin_head', 'aoam_hide_wp_admin_toolbar_on_moderator_orders');
+function aoam_hide_wp_admin_toolbar_on_moderator_orders() {
+ if (($_GET['page'] ?? '') !== 'digitrix-orderflow-my-orders') {
  return;
  }
 
@@ -6089,16 +6088,16 @@ function aoam_hide_wp_admin_toolbar_on_simple_orders() {
  <?php
 }
 
-function simple_moderator_orders_page() {
+function aoam_moderator_orders_page() {
  ?>
  <div class="wrap">
- <div id="aoam-simple-orders-app" class="aoam-simple-ajax-shell">
- <div class="aoam-simple-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>
+ <div id="aoam-moderator-orders-app" class="aoam-moderator-ajax-shell">
+ <div class="aoam-moderator-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>
  </div>
  </div>
  <script>
  jQuery(function($) {
- var $app = $('#aoam-simple-orders-app');
+ var $app = $('#aoam-moderator-orders-app');
  var request = null;
 
  function collectParamsFromUrl(url) {
@@ -6108,28 +6107,28 @@ function simple_moderator_orders_page() {
 
  function collectParamsFromForm($form) {
  var params = new URLSearchParams($form.serialize());
- params.set('page', 'moderator-simple-orders');
+ params.set('page', 'digitrix-orderflow-my-orders');
  params.set('paged', '1');
  return params;
  }
 
- function loadSimpleOrders(params, pushUrl) {
+ function loadModeratorOrders(params, pushUrl) {
  if (request) {
  request.abort();
  }
  var searchParams = params || collectParamsFromUrl();
- searchParams.set('page', 'moderator-simple-orders');
+ searchParams.set('page', 'digitrix-orderflow-my-orders');
  $app.addClass('is-loading');
- if (!$app.children().length || $app.find('.aoam-simple-loading').length) {
- $app.html('<div class="aoam-simple-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>');
+ if (!$app.children().length || $app.find('.aoam-moderator-loading').length) {
+ $app.html('<div class="aoam-moderator-loading"><span class="spinner is-active"></span><p>Loading orders...</p></div>');
  }
  request = $.ajax({
  url: ajaxurl,
  type: 'POST',
  dataType: 'json',
  data: {
- action: 'aoam_simple_orders_ajax',
- nonce: '<?php echo esc_js(wp_create_nonce('aoam_simple_orders_ajax')); ?>',
+ action: 'aoam_moderator_orders_ajax',
+ nonce: '<?php echo esc_js(wp_create_nonce('aoam_moderator_orders_ajax')); ?>',
  status: searchParams.get('status') || 'all',
  date_filter: searchParams.get('date_filter') || 'all',
  phone_search: searchParams.get('phone_search') || '',
@@ -6154,7 +6153,7 @@ function simple_moderator_orders_page() {
  });
  }
 
- window.aoamRefreshSimpleOrders = function() {
+ window.aoamRefreshModeratorOrders = function() {
  var params = collectParamsFromUrl();
  if ($('#status_filter_select').length) {
  params.set('status', $('#status_filter_select').val() || 'all');
@@ -6165,22 +6164,22 @@ function simple_moderator_orders_page() {
  if ($('#phone_search_main').length) {
  params.set('phone_search', $('#phone_search_main').val() || '');
  }
- params.set('page', 'moderator-simple-orders');
+ params.set('page', 'digitrix-orderflow-my-orders');
  params.set('paged', '1');
- loadSimpleOrders(params, false);
+ loadModeratorOrders(params, false);
  };
 
- window.aoamRefreshSimpleOrdersAfterUpdate = function() {
- window.aoamRefreshSimpleOrders();
- setTimeout(window.aoamRefreshSimpleOrders, 350);
+ window.aoamRefreshModeratorOrdersAfterUpdate = function() {
+ window.aoamRefreshModeratorOrders();
+ setTimeout(window.aoamRefreshModeratorOrders, 350);
  };
 
- window.aoamHideSimpleOrderIfFiltered = function(orderId, newStatus) {
+ window.aoamHideModeratorOrderIfFiltered = function(orderId, newStatus) {
  var currentStatus = $('#status_filter_select').val() || 'all';
  if (currentStatus !== 'all' && currentStatus !== newStatus) {
  $('[data-order-id="' + orderId + '"]').remove();
- if (!$('.mobile-order-card').length && !$('.fixed-table tbody tr').length && !$('.aoam-simple-empty-state').length) {
- $('#orders-table-container').append('<div class="aoam-simple-empty-state"><h3>No orders found</h3><p>No orders match the current filters.</p></div>');
+ if (!$('.mobile-order-card').length && !$('.fixed-table tbody tr').length && !$('.aoam-moderator-empty-state').length) {
+ $('#orders-table-container').append('<div class="aoam-moderator-empty-state"><h3>No orders found</h3><p>No orders match the current filters.</p></div>');
  }
  }
  };
@@ -6188,13 +6187,13 @@ function simple_moderator_orders_page() {
  $app.on('submit', '.orders-filter-toolbar, .phone-search-form', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
- loadSimpleOrders(collectParamsFromForm($(this)), true);
+ loadModeratorOrders(collectParamsFromForm($(this)), true);
  });
 
  $app.on('change', '.orders-filter-toolbar select', function(e) {
  e.preventDefault();
  e.stopImmediatePropagation();
- loadSimpleOrders(collectParamsFromForm($(this).closest('form')), true);
+ loadModeratorOrders(collectParamsFromForm($(this).closest('form')), true);
  });
 
  $app.on('change', '.mobile-status-form select[name="order_status"]', function(e) {
@@ -6222,11 +6221,11 @@ function simple_moderator_orders_page() {
  }
  }).done(function(response) {
  if (response && response.success) {
- if (window.aoamHideSimpleOrderIfFiltered) {
- window.aoamHideSimpleOrderIfFiltered(orderId, newStatus);
+ if (window.aoamHideModeratorOrderIfFiltered) {
+ window.aoamHideModeratorOrderIfFiltered(orderId, newStatus);
  }
- if (window.aoamRefreshSimpleOrdersAfterUpdate) {
- window.aoamRefreshSimpleOrdersAfterUpdate();
+ if (window.aoamRefreshModeratorOrdersAfterUpdate) {
+ window.aoamRefreshModeratorOrdersAfterUpdate();
  }
  } else {
  alert(response && response.data ? response.data : 'Status update failed');
@@ -6240,17 +6239,17 @@ function simple_moderator_orders_page() {
  });
  });
 
- $app.on('click', '.tablenav-pages a, .phone-search-form a, .search-stats a, .notice a[href*="moderator-simple-orders"]', function(e) {
+ $app.on('click', '.tablenav-pages a, .phone-search-form a, .search-stats a, .notice a[href*="digitrix-orderflow-my-orders"]', function(e) {
  var href = $(this).attr('href');
  if (!href) {
  return;
  }
  e.preventDefault();
- loadSimpleOrders(collectParamsFromUrl(href), true);
+ loadModeratorOrders(collectParamsFromUrl(href), true);
  });
 
  window.addEventListener('popstate', function() {
- loadSimpleOrders(collectParamsFromUrl(), false);
+ loadModeratorOrders(collectParamsFromUrl(), false);
  });
 
  document.addEventListener('submit', function(event) {
@@ -6259,17 +6258,17 @@ function simple_moderator_orders_page() {
  }
  }, true);
 
- loadSimpleOrders(collectParamsFromUrl(), false);
+ loadModeratorOrders(collectParamsFromUrl(), false);
  });
  </script>
  <style>
- .aoam-simple-ajax-shell {
+ .aoam-moderator-ajax-shell {
  min-height: 240px;
  }
- .aoam-simple-ajax-shell.is-loading {
+ .aoam-moderator-ajax-shell.is-loading {
  pointer-events: none;
  }
- .aoam-simple-loading {
+ .aoam-moderator-loading {
  background: #fff;
  border: 1px solid #dcdcde;
  border-radius: 8px;
@@ -6277,7 +6276,7 @@ function simple_moderator_orders_page() {
  padding: 48px;
  text-align: center;
  }
- .aoam-simple-loading .spinner {
+ .aoam-moderator-loading .spinner {
  float: none;
  margin: 0 0 10px;
  }
@@ -6285,27 +6284,27 @@ function simple_moderator_orders_page() {
  <?php
 }
 
-add_action('wp_ajax_aoam_simple_orders_ajax', 'aoam_simple_orders_ajax');
-function aoam_simple_orders_ajax() {
- check_ajax_referer('aoam_simple_orders_ajax', 'nonce');
+add_action('wp_ajax_aoam_moderator_orders_ajax', 'aoam_moderator_orders_ajax');
+function aoam_moderator_orders_ajax() {
+ check_ajax_referer('aoam_moderator_orders_ajax', 'nonce');
  $current_user = wp_get_current_user();
  $assigned_roles = aoam_get_assigned_roles();
  if (!$current_user || empty(array_intersect((array) $current_user->roles, $assigned_roles))) {
  wp_send_json_error(array('message' => 'Permission denied'), 403);
  }
  
- $_GET['page'] = 'moderator-simple-orders';
+ $_GET['page'] = 'digitrix-orderflow-my-orders';
  $_GET['status'] = isset($_POST['status']) ? sanitize_key(wp_unslash($_POST['status'])) : 'all';
  $_GET['date_filter'] = isset($_POST['date_filter']) ? sanitize_key(wp_unslash($_POST['date_filter'])) : 'all';
  $_GET['phone_search'] = isset($_POST['phone_search']) ? sanitize_text_field(wp_unslash($_POST['phone_search'])) : '';
  $_GET['paged'] = isset($_POST['paged']) ? absint($_POST['paged']) : 1;
 
  ob_start();
- aoam_render_simple_moderator_orders_page_content(true);
+ aoam_render_moderator_orders_page_content(true);
  wp_send_json_success(array('html' => ob_get_clean()));
 }
 
-function aoam_render_simple_moderator_orders_page_content($ajax_request = false) {
+function aoam_render_moderator_orders_page_content($ajax_request = false) {
  $current_user = wp_get_current_user();
  $user_id = $current_user->ID;
  
@@ -6349,7 +6348,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <?php
  } else {
  ?>
- <div class="notice notice-error aoam-simple-empty-state">
+ <div class="notice notice-error aoam-moderator-empty-state">
  <p> You are not authorized to update this order or order not found.</p>
  </div>
  <?php
@@ -6499,21 +6498,21 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  $total_pages = ceil($total_orders / $per_page);
  $offset = ($paged - 1) * $per_page;
  $orders = array_slice($all_filtered_orders, $offset, $per_page);
- $simple_orders_base_url = admin_url('admin.php');
+ $moderator_orders_base_url = admin_url('admin.php');
  $clear_phone_url = add_query_arg(array(
- 'page' => 'moderator-simple-orders',
+ 'page' => 'digitrix-orderflow-my-orders',
  'status' => $status_filter,
  'date_filter' => $date_filter,
- ), $simple_orders_base_url);
+ ), $moderator_orders_base_url);
  $show_all_url = add_query_arg(array(
- 'page' => 'moderator-simple-orders',
- ), $simple_orders_base_url);
+ 'page' => 'digitrix-orderflow-my-orders',
+ ), $moderator_orders_base_url);
  ?>
  
  <!-- Date and Status filters -->
  <div class="order-filters-container">
  <form method="get" class="orders-filter-toolbar">
- <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? 'moderator-simple-orders'); ?>">
+ <input type="hidden" name="page" value="<?php echo esc_attr($_GET['page'] ?? 'digitrix-orderflow-my-orders'); ?>">
  <input type="hidden" name="phone_search" value="<?php echo esc_attr($phone_search); ?>">
  <input type="hidden" name="paged" value="1">
  <div class="orders-filter-field">
@@ -6549,7 +6548,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  
  <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" class="phone-search-form">
  <!-- Keep existing filters in URL -->
- <input type="hidden" name="page" value="moderator-simple-orders">
+ <input type="hidden" name="page" value="digitrix-orderflow-my-orders">
  <input type="hidden" name="status" value="<?php echo esc_attr($status_filter); ?>">
  <input type="hidden" name="date_filter" value="<?php echo esc_attr($date_filter); ?>">
  
@@ -6610,7 +6609,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  <p>You don't have any orders assigned to you yet.</p>
  </div>
  <?php elseif (empty($all_filtered_orders)) : ?>
- <div class="notice notice-info aoam-simple-empty-state">
+ <div class="notice notice-info aoam-moderator-empty-state">
  <p>
  <?php if (!empty($phone_search)): ?>
  <strong> No orders found for phone number:</strong> <?php echo esc_html($phone_search); ?>
@@ -6913,7 +6912,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  'status' => $status_filter,
  'date_filter' => $date_filter,
  'phone_search' => $phone_search
- ), $simple_orders_base_url);
+ ), $moderator_orders_base_url);
  
  // Previous page
  if ($paged > 1) {
@@ -7171,7 +7170,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  margin: 0;
  text-align: right;
  }
- .aoam-simple-empty-state {
+ .aoam-moderator-empty-state {
  background: #fff;
  border: 1px solid #dce2e8;
  border-radius: 10px;
@@ -7180,10 +7179,10 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  padding: 30px 18px;
  text-align: center;
  }
- .aoam-simple-empty-state h3 {
+ .aoam-moderator-empty-state h3 {
  margin: 0 0 8px;
  }
- .aoam-simple-empty-state p {
+ .aoam-moderator-empty-state p {
  color: #64748b;
  margin: 0 0 14px;
  }
@@ -7667,7 +7666,7 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
  url: "<?php echo admin_url('admin-ajax.php'); ?>",
  type: "POST",
  data: {
- action: "get_moderator_order_details_simple",
+ action: "aoam_get_moderator_order_details",
  order_id: orderId,
  nonce: "<?php echo wp_create_nonce('moderator_order_details'); ?>"
  },
@@ -7715,9 +7714,9 @@ function aoam_render_simple_moderator_orders_page_content($ajax_request = false)
 }
 
 // Handle AJAX order details.
-add_action('wp_ajax_get_moderator_order_details_simple', 'get_moderator_order_details_simple_fixed');
+add_action('wp_ajax_aoam_get_moderator_order_details', 'aoam_get_moderator_order_details');
 
-function get_moderator_order_details_simple_fixed() {
+function aoam_get_moderator_order_details() {
  // Check nonce first
  if (!isset($_POST['nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['nonce'])), 'moderator_order_details')) {
  wp_send_json_error('Security verification failed');
@@ -8139,13 +8138,13 @@ function get_moderator_order_details_simple_fixed() {
  $('#current_status_display').text(response.data.new_status_label);
  
  closeOrderModal();
- if (window.aoamHideSimpleOrderIfFiltered) {
- window.aoamHideSimpleOrderIfFiltered(updatedOrderId, updatedStatus);
+ if (window.aoamHideModeratorOrderIfFiltered) {
+ window.aoamHideModeratorOrderIfFiltered(updatedOrderId, updatedStatus);
  }
- if (window.aoamRefreshSimpleOrdersAfterUpdate) {
- window.aoamRefreshSimpleOrdersAfterUpdate();
- } else if (window.aoamRefreshSimpleOrders) {
- window.aoamRefreshSimpleOrders();
+ if (window.aoamRefreshModeratorOrdersAfterUpdate) {
+ window.aoamRefreshModeratorOrdersAfterUpdate();
+ } else if (window.aoamRefreshModeratorOrders) {
+ window.aoamRefreshModeratorOrders();
  } else if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
@@ -8189,10 +8188,10 @@ function get_moderator_order_details_simple_fixed() {
  if (response.success) {
  var message = response.data && response.data.message ? response.data.message : 'User changed successfully!';
  $('#moderator_change_message').html('<div style="color: #46b450; padding: 8px; background: #e5f7e5; border-radius: 4px;">' + message + '</div>').show();
- if (window.aoamRefreshSimpleOrdersAfterUpdate) {
- window.aoamRefreshSimpleOrdersAfterUpdate();
- } else if (window.aoamRefreshSimpleOrders) {
- window.aoamRefreshSimpleOrders();
+ if (window.aoamRefreshModeratorOrdersAfterUpdate) {
+ window.aoamRefreshModeratorOrdersAfterUpdate();
+ } else if (window.aoamRefreshModeratorOrders) {
+ window.aoamRefreshModeratorOrders();
  } else if (window.aoamRefreshRecentAssignments) {
  window.aoamRefreshRecentAssignments();
  }
@@ -8567,7 +8566,7 @@ function add_moderator_section_after_order_details($order) {
  if (in_array('moderator', $current_user->roles)) {
  // KEEP THESE MENUS:
  // - Dashboard (index.php) - Already kept by default
- // - My Orders (moderator-simple-orders) - Our custom page
+ // - My Orders (digitrix-orderflow-my-orders) - Our custom page
  // - Profile (profile.php) - User profile
  
  // REMOVE ALL OTHER MENUS:
@@ -8575,7 +8574,7 @@ function add_moderator_section_after_order_details($order) {
  
  $allowed_menus = array(
  'index.php', // Dashboard
- 'moderator-simple-orders', // My Orders
+ 'digitrix-orderflow-my-orders', // My Orders
  'profile.php', // Profile
  'separator1', // Separators (optional)
  'separator2',
@@ -8666,7 +8665,7 @@ function add_moderator_section_after_order_details($order) {
  $wp_admin_bar->add_node(array(
  'id' => 'moderator-orders',
  'title' => ' My Orders',
- 'href' => admin_url('admin.php?page=moderator-simple-orders'),
+ 'href' => admin_url('admin.php?page=digitrix-orderflow-my-orders'),
  'parent' => 'site-name'
  ));
  
@@ -8696,7 +8695,7 @@ function add_moderator_section_after_order_details($order) {
  $allowed_pages = array(
  '/wp-admin/index.php', // Dashboard
  '/wp-admin/profile.php', // Profile
- '/wp-admin/admin.php?page=moderator-simple-orders', // My Orders
+ '/wp-admin/admin.php?page=digitrix-orderflow-my-orders', // My Orders
  '/wp-admin/admin-ajax.php', // AJAX calls
  );
  
@@ -8711,7 +8710,7 @@ function add_moderator_section_after_order_details($order) {
  
  // If not allowed, redirect to My Orders page
  if (!$is_allowed && strpos($current_page, '/wp-admin/') !== false) {
- wp_redirect(admin_url('admin.php?page=moderator-simple-orders'));
+ wp_redirect(admin_url('admin.php?page=digitrix-orderflow-my-orders'));
  exit;
  }
  }
@@ -8819,7 +8818,7 @@ function moderator_recent_orders_widget() {
  echo '</div>';
  
  echo '<div style="margin-top: 10px; text-align: center;">';
- echo '<a href="' . admin_url('admin.php?page=moderator-simple-orders') . '" class="button button-small">View All Orders</a>';
+ echo '<a href="' . admin_url('admin.php?page=digitrix-orderflow-my-orders') . '" class="button button-small">View All Orders</a>';
  echo '</div>';
  
  ?>
@@ -8962,7 +8961,7 @@ function moderator_orders_dashboard_widget() {
  </div>
  
  <div style="text-align: center; margin-top: 10px;">
- <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders'); ?>" class="button button-primary">
+ <a href="<?php echo admin_url('admin.php?page=digitrix-orderflow-my-orders'); ?>" class="button button-primary">
  View All My Orders
  </a>
  </div>
@@ -8973,13 +8972,13 @@ function moderator_orders_dashboard_widget() {
 function moderator_quick_actions_widget() {
  ?>
  <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
- <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&status=pending'); ?>" class="button" style="text-align: center; padding: 10px;">
+ <a href="<?php echo admin_url('admin.php?page=digitrix-orderflow-my-orders&status=pending'); ?>" class="button" style="text-align: center; padding: 10px;">
  View Pending Orders
  </a>
- <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&status=partial'); ?>" class="button" style="text-align: center; padding: 10px;">
+ <a href="<?php echo admin_url('admin.php?page=digitrix-orderflow-my-orders&status=partial'); ?>" class="button" style="text-align: center; padding: 10px;">
  View Partial Orders
  </a>
- <a href="<?php echo admin_url('admin.php?page=moderator-simple-orders&date_filter=today'); ?>" class="button" style="text-align: center; padding: 10px;">
+ <a href="<?php echo admin_url('admin.php?page=digitrix-orderflow-my-orders&date_filter=today'); ?>" class="button" style="text-align: center; padding: 10px;">
  Today's Orders
  </a>
  <a href="<?php echo admin_url('profile.php'); ?>" class="button" style="text-align: center; padding: 10px;">
@@ -9322,7 +9321,7 @@ function moderator_reassign_orders_page() {
  <input type="checkbox" class="status-checkbox" value="<?php echo $status_key; ?>">
  <span class="checkmark"></span>
  <div class="status-content">
- <div class="status-name" style="color: <?php echo get_status_color_simple($status_key); ?>;">
+ <div class="status-name" style="color: <?php echo aoam_get_status_color($status_key); ?>;">
  <?php echo $status_name; ?>
  </div>
  </div>
@@ -9777,7 +9776,7 @@ function submitReassignment() {
  jQuery('#reassign_orders_submit').click();
 }
 
-function get_status_color_simple(status) {
+function aoam_get_status_color(status) {
  var colors = {
  'pending': '#ffb900',
  'partial': '#777',
@@ -9844,7 +9843,7 @@ function get_user_order_status_counts($user_id) {
  return array();
 }
 
-function get_status_color_simple($status) {
+function aoam_get_status_color($status) {
  $colors = array(
  'pending' => '#ffb900',
  'partial' => '#777',
@@ -9940,7 +9939,7 @@ function get_reassign_preview_final_ajax() {
  $html .= '<h4> Orders by Status</h4>';
  $html .= '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin: 15px 0 25px 0;">';
  foreach ($status_counts as $status => $count) {
- $color = get_status_color_simple($status);
+ $color = aoam_get_status_color($status);
  $html .= '<div style="padding: 10px 15px; background: ' . $color . '20; border-left: 4px solid ' . $color . '; border-radius: 4px;">';
  $html .= '<div style="font-size: 18px; font-weight: bold; color: ' . $color . ';">' . $count . '</div>';
  $html .= '<div style="font-size: 12px; color: ' . $color . ';">' . ucfirst($status) . '</div>';
@@ -9957,7 +9956,7 @@ function get_reassign_preview_final_ajax() {
  if ($sample_count >= 5) break;
  
  $status = $order->get_status();
- $color = get_status_color_simple($status);
+ $color = aoam_get_status_color($status);
  
  $html .= '<div style="padding: 12px 15px; border-bottom: 1px solid #eee; background: white;">';
  $html .= '<div style="display: flex; justify-content: space-between; align-items: center;">';

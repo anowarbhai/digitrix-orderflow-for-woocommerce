@@ -1,6 +1,6 @@
-/* Moderator Simple Orders page polish */
-body.toplevel_page_moderator-simple-orders,
-body.admin_page_moderator-simple-orders {
+/* Moderator Orders page polish */
+body.toplevel_page_digitrix-orderflow-my-orders,
+body.admin_page_digitrix-orderflow-my-orders {
  background: #f3f6fa;
 }
 
